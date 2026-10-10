@@ -1,7 +1,9 @@
 # Antigravity Observability Companion
 
+[![CI](https://github.com/your-username/antigravity-observability/actions/workflows/ci.yml/badge.svg)](#)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Antigravity-2.0%20%7C%20IDE-4285F4.svg)](#)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933.svg)](#)
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20(Pure%20Node)-10b981.svg)](#)
 
 A real-time, in-IDE observability dashboard, prompt cache analyzer, and human-in-the-loop steering extension for **Google Antigravity**.
@@ -29,7 +31,7 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
 * **📊 Categorical Tool Spectrum**:
   - Segmented distribution bar grouping calls into File Edits, Shell/Terminal, Search/Read, and Subagents.
 * **🔄 Seamless Multi-Chat Auto Tracking**:
-  - Reads Antigravity's internal `conversation_summaries.db` SQLite database to display user-facing chat titles.
+  - Automatically queries Antigravity's `conversation_summaries.db` with graceful fallback to brain directory scans across all Node.js 20+ runtimes.
   - **Auto** mode dynamically follows whichever conversation was modified most recently.
 * **⏻ In-UI Monitoring Toggle**:
   - One-click `[ ⏻ ON / OFF ]` button to pause and resume live polling without closing or unmounting the extension.
@@ -46,8 +48,8 @@ flowchart LR
     end
 
     subgraph Sidecar Extension Backend
-        Backend["main.mjs (SidecarApp)"] -.->|Reads| Transcript
-        Backend -.->|Queries| DB
+        Backend["main.mjs + telemetry.mjs"] -.->|Reads| Transcript
+        Backend -.->|Dynamic SQLite / Scan| DB
     end
 
     subgraph IDE Auxiliary Side Pane
@@ -90,10 +92,16 @@ npm run install-plugin
 
 ```text
 antigravity-observability/
-├── package.json             # Root scripts (test, install-plugin)
+├── .github/
+│   └── workflows/ci.yml     # Multi-OS CI matrix (Node 20, 22, 24)
+├── docs/
+│   └── API.md               # Sidecar HTTP API & telemetry schema documentation
+├── package.json             # Root scripts (test, install-plugin) and metadata
 ├── scripts/
-│   ├── install.mjs          # Cross-platform installer
-│   └── test.mjs             # Manifest & syntax validation test suite
+│   ├── install.mjs          # Cross-platform installer with error handling
+│   └── test.mjs             # Unit tests & manifest validation test suite
+├── CHANGELOG.md             # Version release history
+├── CONTRIBUTING.md          # Contribution guidelines
 └── plugin/                  # The Antigravity plugin bundle
     ├── plugin.json          # Plugin manifest
     ├── assets/
@@ -103,6 +111,7 @@ antigravity-observability/
             ├── sidecar.json # Aux pane extension declaration
             ├── package.json # ES module package configuration
             ├── main.mjs     # Node.js backend (reads transcripts & SQLite summaries)
+            ├── telemetry.mjs# Pure analytics, cost calculation & loop radar
             ├── index.html   # 4-Tab client-side interface
             ├── styles.css   # Dark-mode theme-aware styling
             └── app.js       # Live polling & UI rendering logic
@@ -112,7 +121,7 @@ antigravity-observability/
 
 ## 🧪 Testing & Verification
 
-Run the automated test suite to verify manifest integrity and JavaScript syntax:
+Run the automated test suite to verify unit tests, calculations, and manifests:
 
 ```bash
 npm test
@@ -120,15 +129,11 @@ npm test
 
 ---
 
-## 🤝 Contributing
+## 📖 Documentation
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+* [API Reference](docs/API.md) — Sidecar HTTP routes, schema, and pricing formulas.
+* [Contributing Guide](CONTRIBUTING.md) — Development setup and contribution workflow.
+* [Changelog](CHANGELOG.md) — Version release notes.
 
 ---
 

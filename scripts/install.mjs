@@ -12,14 +12,19 @@ console.log('📦 Installing Antigravity Observability Extension...');
 console.log(`Source: ${SOURCE}`);
 console.log(`Target: ${TARGET}`);
 
-if (!existsSync(TARGET_BASE)) {
-  mkdirSync(TARGET_BASE, { recursive: true });
+try {
+  if (!existsSync(TARGET_BASE)) {
+    mkdirSync(TARGET_BASE, { recursive: true });
+  }
+
+  cpSync(SOURCE, TARGET, { recursive: true });
+
+  console.log('\n✅ Successfully installed agent-observability plugin!');
+  console.log('\nNext steps:');
+  console.log('1. In Google Antigravity, click "Customizations" in the left sidebar.');
+  console.log('2. Under the "Installed" tab, toggle "agent-observability" ON (or OFF and ON to reload).');
+  console.log('3. Open any conversation, click ⋮ (three-dot menu) -> Extensions -> Observability.');
+} catch (err) {
+  console.error(`\n❌ Installation failed: ${err.message}`);
+  process.exit(1);
 }
-
-cpSync(SOURCE, TARGET, { recursive: true });
-
-console.log('\n✅ Successfully installed agent-observability plugin!');
-console.log('\nNext steps:');
-console.log('1. In Google Antigravity, click "Customizations" in the left sidebar.');
-console.log('2. Under the "Installed" tab, toggle "agent-observability" ON (or OFF and ON to reload).');
-console.log('3. Open any conversation, click ⋮ (three-dot menu) -> Extensions -> Observability.');

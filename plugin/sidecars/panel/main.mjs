@@ -2,8 +2,17 @@ import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, s
 import { homedir, platform, release } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DatabaseSync } from 'node:sqlite';
 import { Response, SidecarApp } from 'sidecar_sdk';
+import { parseTranscript } from './telemetry.mjs';
+
+// Dynamic import of node:sqlite for backwards compatibility with Node.js < 22.5.0
+let DatabaseSync = null;
+try {
+  const sqlite = await import('node:sqlite');
+  DatabaseSync = sqlite.DatabaseSync || null;
+} catch {
+  // node:sqlite is unavailable in Node < 22.5.0; fallback strategy will be used
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STARTED_AT = Date.now();
@@ -25,14 +34,16 @@ app.api('/api/status', () => ({
   node: process.version,
   platform: `${platform()} ${release()}`,
   uptimeSeconds: Math.round((Date.now() - STARTED_AT) / 1000),
+  sqliteAvailable: Boolean(DatabaseSync),
 }), 'GET');
 
-// Retrieve recent conversations with real user-facing titles from SQLite
+// Retrieve recent conversations with real user-facing titles
 function getRecentSessions() {
-  // Strategy 1: Read conversation_summaries.db
-  if (existsSync(DB_PATH)) {
+  // Strategy 1: Read conversation_summaries.db (SQLite)
+  if (DatabaseSync && existsSync(DB_PATH)) {
+    let db = null;
     try {
-      const db = new DatabaseSync(DB_PATH, { open: true, readOnly: true });
+      db = new DatabaseSync(DB_PATH, { open: true, readOnly: true });
       const rows = db.prepare(`
         SELECT conversation_id, title, preview, step_count, last_modified_time, parent_conversation_id
         FROM conversation_summaries
@@ -40,7 +51,6 @@ function getRecentSessions() {
         ORDER BY last_modified_time DESC
         LIMIT 30
       `).all();
-      db.close();
 
       if (rows && rows.length > 0) {
         return rows.map(r => {
@@ -62,6 +72,14 @@ function getRecentSessions() {
       }
     } catch (err) {
       console.warn('Fallback to brain scan (DB error):', err.message);
+    } finally {
+      if (db) {
+        try {
+          db.close();
+        } catch {
+          // ignore close error
+        }
+      }
     }
   }
 
@@ -83,19 +101,31 @@ function getRecentSessions() {
         }
 
         let title = `Chat ${entry.name.slice(0, 8)}`;
+        let fd = null;
         try {
-          const fd = openSync(transPath, 'r');
-          const buf = Buffer.alloc(1024);
-          const bytesRead = readSync(fd, buf, 0, 1024, 0);
-          closeSync(fd);
-          const firstLine = buf.toString('utf8', 0, bytesRead).split('\n')[0];
-          const parsed = JSON.parse(firstLine);
-          if (parsed.content) {
-            const m = parsed.content.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
-            if (m) title = m[1].trim().split('\n')[0].slice(0, 32);
+          fd = openSync(transPath, 'r');
+          const buf = Buffer.alloc(16384);
+          const bytesRead = readSync(fd, buf, 0, 16384, 0);
+          const rawChunk = buf.toString('utf8', 0, bytesRead);
+          const newlineIdx = rawChunk.indexOf('\n');
+          const firstLine = newlineIdx !== -1 ? rawChunk.slice(0, newlineIdx) : rawChunk;
+          if (firstLine.trim()) {
+            const parsed = JSON.parse(firstLine);
+            if (parsed.content) {
+              const m = parsed.content.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
+              if (m) title = m[1].trim().split('\n')[0].slice(0, 32);
+            }
           }
         } catch {
-          // ignore
+          // ignore malformed initial chunk
+        } finally {
+          if (fd !== null) {
+            try {
+              closeSync(fd);
+            } catch {
+              // ignore close error
+            }
+          }
         }
 
         sessions.push({
@@ -188,138 +218,12 @@ app.api('/api/telemetry', (params) => {
     return { error: `Failed to read transcript: ${err.message}`, status: 'read_error' };
   }
 
-  const lines = raw.trim().split(/\r?\n/).filter(Boolean);
-
-  let totalInputTokens = 0;
-  let totalCacheTokens = 0;
-  let totalOutputTokens = 0;
-  const toolCounts = {};
-  const filesTouched = new Set();
-  const parsedSteps = [];
-  const failedSteps = [];
-  const recentToolCalls = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    try {
-      const step = JSON.parse(lines[i]);
-
-      if (typeof step.input_tokens === 'number') totalInputTokens += step.input_tokens;
-      if (typeof step.cache_read_tokens === 'number') totalCacheTokens += step.cache_read_tokens;
-      if (typeof step.output_tokens === 'number') totalOutputTokens += step.output_tokens;
-
-      const isError = step.status === 'ERROR' ||
-        (typeof step.content === 'string' && (step.content.includes('"exit status 1"') || step.content.includes('Encountered error in tool execution')));
-
-      const toolsInStep = [];
-      if (Array.isArray(step.tool_calls)) {
-        for (const tc of step.tool_calls) {
-          const name = tc.name || 'unknown_tool';
-          toolCounts[name] = (toolCounts[name] || 0) + 1;
-
-          const target = tc.args?.TargetFile || tc.args?.AbsolutePath;
-          if (target && typeof target === 'string') {
-            filesTouched.add(target.replace(/^"|"$/g, ''));
-          }
-
-          const toolSummary = tc.args?.toolSummary ? String(tc.args.toolSummary).replace(/^"|"$/g, '') : '';
-          const toolAction = tc.args?.toolAction ? String(tc.args.toolAction).replace(/^"|"$/g, '') : '';
-          const signature = `${name}:${tc.args?.CommandLine || tc.args?.AbsolutePath || tc.args?.TargetFile || ''}`;
-
-          recentToolCalls.push({
-            name,
-            signature,
-            stepIndex: step.step_index ?? i,
-          });
-
-          toolsInStep.push({
-            name,
-            summary: toolSummary,
-            action: toolAction,
-          });
-        }
-      }
-
-      const stepRecord = {
-        stepIndex: step.step_index ?? i,
-        source: step.source || 'UNKNOWN',
-        type: step.type || 'UNKNOWN',
-        status: isError ? 'ERROR' : (step.status || 'DONE'),
-        createdAt: step.created_at || null,
-        inputTokens: step.input_tokens || 0,
-        outputTokens: step.output_tokens || 0,
-        tools: toolsInStep,
-      };
-
-      parsedSteps.push(stepRecord);
-
-      if (isError) {
-        failedSteps.push(stepRecord);
-      }
-    } catch {
-      // Ignore trailing partial lines
-    }
-  }
-
-  // Calculate duration between consecutive steps
-  for (let i = 0; i < parsedSteps.length; i++) {
-    if (i > 0 && parsedSteps[i].createdAt && parsedSteps[i - 1].createdAt) {
-      const prev = new Date(parsedSteps[i - 1].createdAt).getTime();
-      const curr = new Date(parsedSteps[i].createdAt).getTime();
-      const diffMs = curr - prev;
-      parsedSteps[i].durationSeconds = diffMs >= 0 ? +(diffMs / 1000).toFixed(1) : 0;
-    } else {
-      parsedSteps[i].durationSeconds = 0;
-    }
-  }
-
-  // Cost & Cache calculations
-  const totalPromptTokens = totalInputTokens + totalCacheTokens;
-  const cacheHitRate = totalPromptTokens > 0
-    ? `${((totalCacheTokens / totalPromptTokens) * 100).toFixed(1)}%`
-    : '0%';
-
-  // Gemini benchmark: ~$0.15/1M fresh prompt, cached ~$0.0375/1M, out ~$0.60/1M
-  const costNumber = (totalInputTokens * 0.00000015) + (totalCacheTokens * 0.0000000375) + (totalOutputTokens * 0.0000006);
-  const estimatedCost = `$${costNumber.toFixed(4)}`;
-
-  // Loop detection
-  let loopDetected = null;
-  const tail = recentToolCalls.slice(-8);
-  const sigCounts = {};
-  for (const item of tail) {
-    if (!item.signature || item.signature.endsWith(':')) continue;
-    sigCounts[item.signature] = (sigCounts[item.signature] || 0) + 1;
-    if (sigCounts[item.signature] >= 3) {
-      loopDetected = {
-        tool: item.name,
-        repetitions: sigCounts[item.signature],
-        signature: item.signature,
-      };
-      break;
-    }
-  }
-
-  return {
-    status: 'active',
+  return parseTranscript(raw, {
     conversationId,
     activeTitle,
     isAuto,
     sessions: recentSessions,
-    totalSteps: parsedSteps.length,
-    inputTokens: totalInputTokens,
-    cacheReadTokens: totalCacheTokens,
-    totalPromptTokens,
-    outputTokens: totalOutputTokens,
-    totalTokens: totalPromptTokens + totalOutputTokens,
-    estimatedCost,
-    cacheHitRate,
-    errorCount: failedSteps.length,
-    loopDetected,
-    toolCounts,
-    filesTouched: Array.from(filesTouched),
-    failedSteps: failedSteps.slice(-10).reverse(),
-    recentSteps: parsedSteps.slice(-25).reverse(),
-  };
+  });
 }, 'GET');
 
 app.run();

@@ -1,9 +1,12 @@
 {
   "name": "antigravity-observability",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Real-time in-IDE observability dashboard, prompt cache analytics, and steering companion for Google Antigravity.",
   "type": "module",
   "main": "plugin/sidecars/panel/main.mjs",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "test": "node scripts/test.mjs",
     "install-plugin": "node scripts/install.mjs"
@@ -18,6 +21,6 @@
     "gemini",
     "prompt-caching"
   ],
-  "author": "",
+  "author": "Antigravity Community",
   "license": "MIT"
 }
