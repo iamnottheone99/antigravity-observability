@@ -37,6 +37,7 @@ app.api('/styles.css', () => new Response(readLocal('styles.css'), { contentType
 // System status
 app.api('/api/status', () => ({
   status: 'ok',
+  version: '1.1.0',
   node: process.version,
   platform: `${platform()} ${release()}`,
   uptimeSeconds: Math.round((Date.now() - STARTED_AT) / 1000),

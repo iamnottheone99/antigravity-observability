@@ -41,6 +41,7 @@ console.log('📦 Manifest & Structure Checks:');
 runTest('plugin.json is valid and contains expected metadata', () => {
   const data = JSON.parse(readFileSync(join(PLUGIN, 'plugin.json'), 'utf8'));
   assert.equal(data.name, 'agent-observability');
+  assert.equal(data.version, '1.1.0');
   assert.ok(data.description && data.description.length > 0);
   assert.equal(data.logo, 'assets/logo.svg');
 });
@@ -54,14 +55,16 @@ runTest('sidecar.json defines auxiliary pane entrypoint', () => {
   assert.ok(auxView, 'Missing SIDECAR_UI_ENTRYPOINT_AUX_PANE in sidecar.json');
 });
 
-runTest('sidecars package.json defines ES module', () => {
+runTest('sidecars package.json defines ES module and matches version', () => {
   const data = JSON.parse(readFileSync(join(PLUGIN, 'sidecars/panel/package.json'), 'utf8'));
   assert.equal(data.type, 'module');
+  assert.equal(data.version, '1.1.0');
 });
 
 runTest('root package.json is valid and declares engines', () => {
   const data = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   assert.equal(data.name, 'antigravity-observability');
+  assert.equal(data.version, '1.1.0');
   assert.equal(data.type, 'module');
   assert.ok(data.engines?.node, 'Missing engines.node definition');
 });
