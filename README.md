@@ -1,6 +1,6 @@
 # Antigravity Observability Companion
 
-[![CI](https://github.com/your-username/antigravity-observability/actions/workflows/ci.yml/badge.svg)](#)
+[![CI](https://github.com/iamnottheone99/antigravity-observability/actions/workflows/ci.yml/badge.svg)](https://github.com/iamnottheone99/antigravity-observability/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Antigravity-2.0%20%7C%20IDE-4285F4.svg)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933.svg)](#)
@@ -69,7 +69,7 @@ flowchart LR
 ### 1. Clone & Install
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/antigravity-observability.git
+git clone https://github.com/iamnottheone99/antigravity-observability.git
 cd antigravity-observability
 
 # Install the plugin into your global Antigravity plugins directory

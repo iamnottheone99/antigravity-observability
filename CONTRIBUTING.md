@@ -10,7 +10,7 @@ Thank you for your interest in contributing to the Antigravity Observability Com
 
 2. **Clone & Test**:
    ```bash
-   git clone https://github.com/your-username/antigravity-observability.git
+   git clone https://github.com/iamnottheone99/antigravity-observability.git
    cd antigravity-observability
    npm test
    ```

@@ -21,6 +21,14 @@
     "gemini",
     "prompt-caching"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iamnottheone99/antigravity-observability.git"
+  },
+  "bugs": {
+    "url": "https://github.com/iamnottheone99/antigravity-observability/issues"
+  },
+  "homepage": "https://github.com/iamnottheone99/antigravity-observability#readme",
   "author": "Antigravity Community",
   "license": "MIT"
 }
