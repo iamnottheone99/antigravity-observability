@@ -1,0 +1,104 @@
+{
+  ".engram/config.json": {
+    "mtime": 1791642497.8071668,
+    "seen": 1791643259.2674165,
+    "ast_hash": "aee0dacba848af24d98f1a67fe7e2288",
+    "semantic_hash": "aee0dacba848af24d98f1a67fe7e2288"
+  },
+  "package.json": {
+    "mtime": 1791642671.9792528,
+    "seen": 1791643259.2674165,
+    "ast_hash": "610771e7f1b0368155adf1b5bf1f8f4c",
+    "semantic_hash": "610771e7f1b0368155adf1b5bf1f8f4c"
+  },
+  "plugin/plugin.json": {
+    "mtime": 1791605703.6677876,
+    "seen": 1791643259.2674165,
+    "ast_hash": "5439c0f7eeac2985c0fa3c05f8a32dcd",
+    "semantic_hash": "5439c0f7eeac2985c0fa3c05f8a32dcd"
+  },
+  "plugin/sidecars/panel/app.js": {
+    "mtime": 1791640081.3729703,
+    "seen": 1791643259.2674165,
+    "ast_hash": "8a74477d26f95789f6316f2b5d011c78",
+    "semantic_hash": "8a74477d26f95789f6316f2b5d011c78"
+  },
+  "plugin/sidecars/panel/main.mjs": {
+    "mtime": 1791642593.4231808,
+    "seen": 1791643259.2674165,
+    "ast_hash": "ea376ef697946fd02d054ba254311ffa",
+    "semantic_hash": "ea376ef697946fd02d054ba254311ffa"
+  },
+  "plugin/sidecars/panel/package.json": {
+    "mtime": 1791605719.3015928,
+    "seen": 1791643259.2674165,
+    "ast_hash": "30ca950eb7be97ccb6f424b81c2d01f6",
+    "semantic_hash": "30ca950eb7be97ccb6f424b81c2d01f6"
+  },
+  "plugin/sidecars/panel/sidecar.json": {
+    "mtime": 1791605722.40368,
+    "seen": 1791643259.2674165,
+    "ast_hash": "adb27a87ad2b0dda65d95df783a499cb",
+    "semantic_hash": "adb27a87ad2b0dda65d95df783a499cb"
+  },
+  "plugin/sidecars/panel/telemetry.mjs": {
+    "mtime": 1791642553.5754583,
+    "seen": 1791643259.2674165,
+    "ast_hash": "c70f1eab81770286725aedc1caed2036",
+    "semantic_hash": "c70f1eab81770286725aedc1caed2036"
+  },
+  "scripts/install.mjs": {
+    "mtime": 1791642615.8872213,
+    "seen": 1791643259.2674165,
+    "ast_hash": "4a89a1d926eceec98342b915592c5563",
+    "semantic_hash": "4a89a1d926eceec98342b915592c5563"
+  },
+  "scripts/test.mjs": {
+    "mtime": 1791642648.7511537,
+    "seen": 1791643259.2674165,
+    "ast_hash": "2c635de5135a642c41f88a06034faf37",
+    "semantic_hash": "2c635de5135a642c41f88a06034faf37"
+  },
+  ".github/workflows/ci.yml": {
+    "mtime": 1791642661.4236114,
+    "seen": 1791643259.2674165,
+    "ast_hash": "c6e01305d15f9cd41169d055fbb174aa",
+    "semantic_hash": "c6e01305d15f9cd41169d055fbb174aa"
+  },
+  "CHANGELOG.md": {
+    "mtime": 1791642701.216718,
+    "seen": 1791643259.2674165,
+    "ast_hash": "42077ea91b0f5fe73e4407676ce36e4e",
+    "semantic_hash": "42077ea91b0f5fe73e4407676ce36e4e"
+  },
+  "CONTRIBUTING.md": {
+    "mtime": 1791642693.2593887,
+    "seen": 1791643259.2674165,
+    "ast_hash": "2b9289cc579212326f49bbe0df5a303f",
+    "semantic_hash": "2b9289cc579212326f49bbe0df5a303f"
+  },
+  "README.md": {
+    "mtime": 1791642723.4407282,
+    "seen": 1791643259.2674165,
+    "ast_hash": "43baa639f972468db9c6bea611034638",
+    "semantic_hash": "43baa639f972468db9c6bea611034638"
+  },
+  "docs/API.md": {
+    "mtime": 1791642684.7271044,
+    "seen": 1791643259.2674165,
+    "ast_hash": "f6eb716e916eb5418d01b45f7fb90e7f",
+    "semantic_hash": "f6eb716e916eb5418d01b45f7fb90e7f"
+  },
+  "plugin/sidecars/panel/index.html": {
+    "mtime": 1791639332.3985717,
+    "seen": 1791643259.2674165,
+    "ast_hash": "d1ae3dc52a7847aad99da05697f3e9d4",
+    "semantic_hash": "d1ae3dc52a7847aad99da05697f3e9d4"
+  },
+  "plugin/assets/logo.svg": {
+    "mtime": 1791605708.6105263,
+    "seen": 1791643259.2674165,
+    "ast_hash": "abf4b06f7c5b8fef7b3e3cb870990a0c",
+    "semantic_hash": "abf4b06f7c5b8fef7b3e3cb870990a0c"
+  }
+}

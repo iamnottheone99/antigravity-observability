@@ -1,0 +1,318 @@
+{
+  "nodes": [
+    {
+      "id": "readme_overview",
+      "label": "Antigravity Observability Overview",
+      "file_type": "document",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "readme_prompt_cache_analytics",
+      "label": "Prompt Cache Hit Rate",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "readme_waterfall_timeline",
+      "label": "Waterfall Trace Timeline",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "readme_loop_radar",
+      "label": "Loop & Stall Radar",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "readme_human_steering",
+      "label": "Human-in-the-Loop Steering",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "docs_api_telemetry_endpoint",
+      "label": "API /api/telemetry",
+      "file_type": "document",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\docs\\API.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "docs_api_sessions_endpoint",
+      "label": "API /api/sessions",
+      "file_type": "document",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\docs\\API.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "docs_api_status_endpoint",
+      "label": "API /api/status",
+      "file_type": "document",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\docs\\API.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "docs_api_pricing_formula",
+      "label": "Gemini Cost Benchmark Model",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\docs\\API.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "changelog_v1_0_1_release",
+      "label": "Changelog v1.0.1 Release",
+      "file_type": "document",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "contributing_zero_deps",
+      "label": "Zero Dependency Policy",
+      "file_type": "rationale",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\CONTRIBUTING.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "ci_multi_os_matrix",
+      "label": "Multi-OS Multi-Node CI Matrix",
+      "file_type": "document",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\.github\\workflows\\ci.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "panel_index_ui_tabs",
+      "label": "Auxiliary Pane 4-Tab Interface",
+      "file_type": "document",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\plugin\\sidecars\\panel\\index.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "assets_logo_radar_icon",
+      "label": "Telemetry Radar SVG Icon",
+      "file_type": "image",
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\plugin\\assets\\logo.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "readme_overview",
+      "target": "plugin_sidecars_panel_main",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_overview",
+      "target": "panel_index_ui_tabs",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_prompt_cache_analytics",
+      "target": "plugin_sidecars_panel_telemetry_calculatecachehitrate",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_api_pricing_formula",
+      "target": "plugin_sidecars_panel_telemetry_calculatecost",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\docs\\API.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_loop_radar",
+      "target": "plugin_sidecars_panel_telemetry_detectrepetitionloop",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_waterfall_timeline",
+      "target": "plugin_sidecars_panel_app_renderwaterfall",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_human_steering",
+      "target": "plugin_sidecars_panel_app_sendsteermessage",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_api_telemetry_endpoint",
+      "target": "plugin_sidecars_panel_telemetry_parsetranscript",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\docs\\API.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_api_sessions_endpoint",
+      "target": "plugin_sidecars_panel_main_getrecentsessions",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\docs\\API.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "panel_index_ui_tabs",
+      "target": "plugin_sidecars_panel_app",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\plugin\\sidecars\\panel\\index.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "ci_multi_os_matrix",
+      "target": "scripts_test",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\.github\\workflows\\ci.yml",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "changelog_v1_0_1_release",
+      "target": "plugin_sidecars_panel_telemetry",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\CHANGELOG.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "contributing_zero_deps",
+      "target": "plugin_sidecars_panel_main",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\CONTRIBUTING.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "assets_logo_radar_icon",
+      "target": "panel_index_ui_tabs",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\plugin\\assets\\logo.svg",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "telemetry_analytics_pipeline",
+      "label": "Telemetry Analytics Pipeline",
+      "nodes": [
+        "docs_api_telemetry_endpoint",
+        "plugin_sidecars_panel_telemetry_parsetranscript",
+        "plugin_sidecars_panel_telemetry_calculatecost",
+        "plugin_sidecars_panel_telemetry_calculatecachehitrate"
+      ],
+      "relation": "implement",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "C:\\Users\\ashmi\\Documents\\Projects\\antigravity-observability\\docs\\API.md"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

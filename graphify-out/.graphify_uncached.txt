@@ -1,0 +1,7 @@
+C:\Users\ashmi\Documents\Projects\antigravity-observability\.github\workflows\ci.yml
+C:\Users\ashmi\Documents\Projects\antigravity-observability\CHANGELOG.md
+C:\Users\ashmi\Documents\Projects\antigravity-observability\CONTRIBUTING.md
+C:\Users\ashmi\Documents\Projects\antigravity-observability\README.md
+C:\Users\ashmi\Documents\Projects\antigravity-observability\docs\API.md
+C:\Users\ashmi\Documents\Projects\antigravity-observability\plugin\sidecars\panel\index.html
+C:\Users\ashmi\Documents\Projects\antigravity-observability\plugin\assets\logo.svg
