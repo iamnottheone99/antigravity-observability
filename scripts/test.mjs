@@ -8,6 +8,9 @@ import {
   calculateCacheHitRate,
   calculateCost,
   detectRepetitionLoop,
+  escapeHtml,
+  formatTokens,
+  getToolCategory,
   parseTranscript,
 } from '../plugin/sidecars/panel/telemetry.mjs';
 
@@ -56,13 +59,14 @@ runTest('sidecars package.json defines ES module', () => {
   assert.equal(data.type, 'module');
 });
 
-runTest('root package.json is valid', () => {
+runTest('root package.json is valid and declares engines', () => {
   const data = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   assert.equal(data.name, 'antigravity-observability');
   assert.equal(data.type, 'module');
+  assert.ok(data.engines?.node, 'Missing engines.node definition');
 });
 
-runTest('HTML layout contains all 4 tabs and key controls', () => {
+runTest('HTML layout contains all 4 tabs, CSP, and ARIA roles', () => {
   const html = readFileSync(join(PLUGIN, 'sidecars/panel/index.html'), 'utf8');
   assert.ok(html.includes('id="pane-overview"'), 'Missing pane-overview');
   assert.ok(html.includes('id="pane-traces"'), 'Missing pane-traces');
@@ -70,10 +74,15 @@ runTest('HTML layout contains all 4 tabs and key controls', () => {
   assert.ok(html.includes('id="pane-steer"'), 'Missing pane-steer');
   assert.ok(html.includes('id="btn-toggle-monitor"'), 'Missing power toggle');
   assert.ok(html.includes('id="btn-copy-report"'), 'Missing copy report button');
+  assert.ok(html.includes('Content-Security-Policy'), 'Missing Content-Security-Policy meta tag');
+  assert.ok(html.includes('role="tablist"'), 'Missing role="tablist"');
+  assert.ok(html.includes('role="tabpanel"'), 'Missing role="tabpanel"');
+  assert.ok(html.includes('aria-label="Select conversation to observe"'), 'Missing select aria-label');
+  assert.ok(html.includes('aria-label="Type instruction for agent"'), 'Missing steer input aria-label');
 });
 
 // -----------------------------------------------------------------------------
-// 2. Syntax Validation
+// 2. Syntax Verification
 // -----------------------------------------------------------------------------
 console.log('\n🔍 Syntax Verification:');
 
@@ -114,28 +123,13 @@ runTest('calculateCost handles zero tokens', () => {
 });
 
 runTest('calculateCost applies Gemini benchmark pricing formula', () => {
-  // 1M fresh input ($0.15), 0 cache, 0 out
   assert.equal(calculateCost(1000000, 0, 0), '$0.1500');
-  // 0 fresh, 1M cache ($0.0375), 0 out
   assert.equal(calculateCost(0, 1000000, 0), '$0.0375');
-  // 0 fresh, 0 cache, 1M out ($0.60)
   assert.equal(calculateCost(0, 0, 1000000), '$0.6000');
-  // Mixed calculation
-  // 10k in ($0.0015) + 20k cache ($0.00075) + 5k out ($0.0030) = $0.00525 -> $0.0053
   assert.equal(calculateCost(10000, 20000, 5000), '$0.0053');
 });
 
-runTest('detectRepetitionLoop returns null when repetitions are below threshold', () => {
-  const calls = [
-    { name: 'run_command', signature: 'run_command:git status' },
-    { name: 'view_file', signature: 'view_file:package.json' },
-    { name: 'run_command', signature: 'run_command:git status' },
-  ];
-  assert.equal(detectRepetitionLoop(calls, 3), null);
-  assert.equal(detectRepetitionLoop([], 3), null);
-});
-
-runTest('detectRepetitionLoop detects >= 3 consecutive identical tool calls', () => {
+runTest('detectRepetitionLoop detects strictly consecutive identical tool calls', () => {
   const calls = [
     { name: 'view_file', signature: 'view_file:foo.txt' },
     { name: 'view_file', signature: 'view_file:foo.txt' },
@@ -146,6 +140,27 @@ runTest('detectRepetitionLoop detects >= 3 consecutive identical tool calls', ()
   assert.equal(loop.tool, 'view_file');
   assert.equal(loop.repetitions, 3);
   assert.equal(loop.signature, 'view_file:foo.txt');
+});
+
+runTest('detectRepetitionLoop does not trigger false positives on alternating patterns', () => {
+  // Common edit-inspect cycle: view, edit, view, edit, view
+  const alternating = [
+    { name: 'view_file', signature: 'view_file:foo.txt' },
+    { name: 'replace_file_content', signature: 'replace_file_content:foo.txt' },
+    { name: 'view_file', signature: 'view_file:foo.txt' },
+    { name: 'replace_file_content', signature: 'replace_file_content:foo.txt' },
+    { name: 'view_file', signature: 'view_file:foo.txt' },
+  ];
+  assert.equal(detectRepetitionLoop(alternating, 3), null);
+});
+
+runTest('detectRepetitionLoop ignores trailing calls without arguments', () => {
+  const emptySig = [
+    { name: 'run_command', signature: 'run_command:' },
+    { name: 'run_command', signature: 'run_command:' },
+    { name: 'run_command', signature: 'run_command:' },
+  ];
+  assert.equal(detectRepetitionLoop(emptySig, 3), null);
 });
 
 runTest('parseTranscript handles empty or malformed input safely', () => {
@@ -222,12 +237,42 @@ runTest('parseTranscript aggregates token metrics, steps, latencies, and touched
   assert.equal(report.toolCounts['run_command'], 1);
 
   // Duration checks
-  // Step 0: duration = 0
   assert.equal(report.recentSteps[2].durationSeconds, 0);
-  // Step 1: 12:00:02.500 - 12:00:00.000 = 2.5s
   assert.equal(report.recentSteps[1].durationSeconds, 2.5);
-  // Step 2: 12:00:05.000 - 12:00:02.500 = 2.5s
   assert.equal(report.recentSteps[0].durationSeconds, 2.5);
+});
+
+// -----------------------------------------------------------------------------
+// 4. Frontend Helper Unit Tests
+// -----------------------------------------------------------------------------
+console.log('\n🎨 Frontend Helper Unit Tests:');
+
+runTest('getToolCategory classifies tools into proper categories', () => {
+  assert.equal(getToolCategory('replace_file_content').id, 'file');
+  assert.equal(getToolCategory('write_to_file').id, 'file');
+  assert.equal(getToolCategory('run_command').id, 'shell');
+  assert.equal(getToolCategory('view_file').id, 'read');
+  assert.equal(getToolCategory('search_web').id, 'read');
+  assert.equal(getToolCategory('invoke_subagent').id, 'agent');
+  assert.equal(getToolCategory('send_message').id, 'agent');
+  assert.equal(getToolCategory('unknown_custom_tool').id, 'other');
+});
+
+runTest('formatTokens formats values with k and M units correctly', () => {
+  assert.equal(formatTokens(0), '0');
+  assert.equal(formatTokens(null), '0');
+  assert.equal(formatTokens(NaN), '0');
+  assert.equal(formatTokens(850), '850');
+  assert.equal(formatTokens(1500), '1.5k');
+  assert.equal(formatTokens(24000), '24.0k');
+  assert.equal(formatTokens(1250000), '1.25M');
+});
+
+runTest('escapeHtml escapes dangerous HTML entities', () => {
+  assert.equal(escapeHtml('<script>alert("xss")</script>'), '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+  assert.equal(escapeHtml('foo & bar'), 'foo &amp; bar');
+  assert.equal(escapeHtml(null), '');
+  assert.equal(escapeHtml(undefined), '');
 });
 
 // -----------------------------------------------------------------------------

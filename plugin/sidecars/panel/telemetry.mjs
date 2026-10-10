@@ -38,7 +38,7 @@ export function calculateCost(inputTokens = 0, cacheTokens = 0, outputTokens = 0
 }
 
 /**
- * Detects repetitive tool loops using a sliding window across the most recent tool calls.
+ * Detects repetitive tool loops by tracking strictly consecutive identical tool executions.
  *
  * @param {Array<{name: string, signature: string}>} recentToolCalls
  * @param {number} threshold Consecutive repetition count to trigger warning (default: 3)
@@ -48,19 +48,49 @@ export function detectRepetitionLoop(recentToolCalls = [], threshold = 3) {
   if (!Array.isArray(recentToolCalls) || recentToolCalls.length < threshold) {
     return null;
   }
-  const tail = recentToolCalls.slice(-8);
-  const sigCounts = {};
-  for (const item of tail) {
-    if (!item.signature || item.signature.endsWith(':')) continue;
-    sigCounts[item.signature] = (sigCounts[item.signature] || 0) + 1;
-    if (sigCounts[item.signature] >= threshold) {
-      return {
-        tool: item.name,
-        repetitions: sigCounts[item.signature],
-        signature: item.signature,
-      };
+
+  const validCalls = recentToolCalls.filter(c => c && c.signature && !c.signature.endsWith(':'));
+  if (validCalls.length < threshold) {
+    return null;
+  }
+
+  // 1. Check current trailing streak (active loop at the head of execution)
+  const lastCall = validCalls[validCalls.length - 1];
+  let trailingStreak = 0;
+  for (let i = validCalls.length - 1; i >= 0; i--) {
+    if (validCalls[i].signature === lastCall.signature) {
+      trailingStreak++;
+    } else {
+      break;
     }
   }
+
+  if (trailingStreak >= threshold) {
+    return {
+      tool: lastCall.name,
+      repetitions: trailingStreak,
+      signature: lastCall.signature,
+    };
+  }
+
+  // 2. Check if a consecutive streak of >= threshold occurred recently (last 16 calls)
+  const windowSlice = validCalls.slice(-16);
+  let streak = 1;
+  for (let i = windowSlice.length - 1; i > 0; i--) {
+    if (windowSlice[i].signature === windowSlice[i - 1].signature) {
+      streak++;
+      if (streak >= threshold) {
+        return {
+          tool: windowSlice[i].name,
+          repetitions: streak,
+          signature: windowSlice[i].signature,
+        };
+      }
+    } else {
+      streak = 1;
+    }
+  }
+
   return null;
 }
 
@@ -193,3 +223,54 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
     recentSteps: parsedSteps.slice(-25).reverse(),
   };
 }
+
+/**
+ * Classifies tool calls into semantic UI categories.
+ *
+ * @param {string} toolName
+ * @returns {{ id: string, label: string, color: string, cls: string }}
+ */
+export function getToolCategory(toolName) {
+  if (['replace_file_content', 'write_to_file'].includes(toolName)) {
+    return { id: 'file', label: 'File Edits', color: '#3b82f6', cls: 'segment-file' };
+  }
+  if (['run_command'].includes(toolName)) {
+    return { id: 'shell', label: 'Shell / Terminal', color: '#8b5cf6', cls: 'segment-shell' };
+  }
+  if (['view_file', 'read_url_content', 'read_resource', 'search_web'].includes(toolName)) {
+    return { id: 'read', label: 'Read / Search', color: '#10b981', cls: 'segment-read' };
+  }
+  if (['invoke_subagent', 'send_message', 'manage_subagents'].includes(toolName)) {
+    return { id: 'agent', label: 'Subagents', color: '#f59e0b', cls: 'segment-agent' };
+  }
+  return { id: 'other', label: 'Other Tools', color: '#64748b', cls: 'segment-other' };
+}
+
+/**
+ * Formats token count with k/M suffixes.
+ *
+ * @param {number} num
+ * @returns {string} e.g. "1.2M", "45.0k", "850"
+ */
+export function formatTokens(num) {
+  if (!num || isNaN(num)) return '0';
+  if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+  return String(num);
+}
+
+/**
+ * Escapes unsafe HTML characters.
+ *
+ * @param {string} str
+ * @returns {string}
+ */
+export function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+

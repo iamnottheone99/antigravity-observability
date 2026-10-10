@@ -1,5 +1,20 @@
+# Dependencies & Logs
 node_modules/
 .data/
 *.log
+
+# Caches & Temporary build artifacts
+graphify-out/cache/
+*.tmp
+
+# Visual Check artifacts
+docs/*.visual-check.*.png
+docs/*.visual-check.json
+docs/*.visual-check.html
+
+# IDE & OS Metadata
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
+desktop.ini
