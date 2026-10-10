@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Agent Observability</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/preload.js"></script>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <div id="pulse-indicator" class="pulse-indicator">
+          <span class="dot"></span>
+        </div>
+        <h1 class="header-title">
+          <span>Observability</span>
+        </h1>
+      </div>
+      <div class="header-right">
+        <select id="session-select" class="session-dropdown" title="Select conversation to observe">
+          <option value="auto">Auto (Active Chat)</option>
+        </select>
+        <button id="btn-toggle-monitor" class="btn-power-toggle active" title="Toggle live monitoring On/Off">
+          <svg class="icon power-icon" viewBox="0 0 24 24">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+            <line x1="12" y1="2" x2="12" y2="12"/>
+          </svg>
+          <span id="power-text">ON</span>
+        </button>
+        <span id="session-badge" class="status-badge">Connecting</span>
+      </div>
+    </header>
+
+    <!-- Client-Side Tab Navigation Bar -->
+    <nav class="tab-nav" role="tablist">
+      <button class="nav-tab active" data-tab="pane-overview" role="tab">
+        <svg class="icon" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="7"/>
+          <rect x="14" y="3" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/>
+          <rect x="3" y="14" width="7" height="7"/>
+        </svg>
+        <span>Overview</span>
+      </button>
+
+      <button class="nav-tab" data-tab="pane-traces" role="tab">
+        <svg class="icon" viewBox="0 0 24 24">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <span>Traces</span>
+        <span id="tab-traces-badge" class="nav-badge tabular mono">0</span>
+      </button>
+
+      <button class="nav-tab" data-tab="pane-files" role="tab">
+        <svg class="icon" viewBox="0 0 24 24">
+          <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+          <polyline points="13 2 13 9 20 9"/>
+        </svg>
+        <span>Files</span>
+        <span id="tab-files-badge" class="nav-badge tabular mono">0</span>
+      </button>
+
+      <button class="nav-tab" data-tab="pane-steer" role="tab">
+        <svg class="icon" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/>
+          <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+        </svg>
+        <span>Steer</span>
+      </button>
+    </nav>
+
+    <!-- TAB 1: OVERVIEW -->
+    <main id="pane-overview" class="tab-pane active" role="tabpanel">
+      <!-- Loop Warning Alert Banner -->
+      <div id="loop-banner" class="alert-banner" role="alert">
+        <svg class="icon alert-icon" viewBox="0 0 24 24">
+          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <div class="alert-content">
+          <div class="alert-title">Agent Repetition Loop Detected</div>
+          <div id="loop-details" class="alert-desc">The agent has called the same tool consecutively.</div>
+        </div>
+      </div>
+
+      <!-- KPI Metric Tiles Grid -->
+      <section class="grid">
+        <!-- Cost & Cache Tile -->
+        <div class="tile">
+          <div class="tile-top">
+            <span class="tile-label">Est. Cost</span>
+            <svg class="icon" style="color: var(--muted-foreground);" viewBox="0 0 24 24">
+              <line x1="12" y1="1" x2="12" y2="23"/>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </div>
+          <div id="val-cost" class="tile-value mono tabular">$0.0000</div>
+          <div class="tile-footer">
+            <span id="val-cache-rate" class="tabular">0% cache hit</span>
+            <div class="micro-bar" style="width: 48px;">
+              <div id="bar-cache-fill" class="micro-bar-fill cache" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Token Volume Tile -->
+        <div class="tile">
+          <div class="tile-top">
+            <span class="tile-label">Tokens</span>
+            <svg class="icon" style="color: var(--muted-foreground);" viewBox="0 0 24 24">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+          </div>
+          <div id="val-tokens" class="tile-value mono tabular">0k</div>
+          <div class="tile-footer">
+            <span id="val-tokens-sub" class="tabular">In: 0k · Out: 0k</span>
+          </div>
+        </div>
+
+        <!-- Total Steps Tile -->
+        <div class="tile">
+          <div class="tile-top">
+            <span class="tile-label">Steps</span>
+            <svg class="icon" style="color: var(--muted-foreground);" viewBox="0 0 24 24">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+              <polyline points="2 17 12 22 22 17"/>
+              <polyline points="2 12 12 17 22 12"/>
+            </svg>
+          </div>
+          <div id="val-steps" class="tile-value mono tabular">0</div>
+          <div class="tile-footer">
+            <span id="val-steps-sub" class="tabular">0 errors</span>
+          </div>
+        </div>
+
+        <!-- Tool Execution Tile -->
+        <div class="tile">
+          <div class="tile-top">
+            <span class="tile-label">Tools</span>
+            <svg class="icon" style="color: var(--muted-foreground);" viewBox="0 0 24 24">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+            </svg>
+          </div>
+          <div id="val-tools-count" class="tile-value mono tabular">0</div>
+          <div class="tile-footer">
+            <span id="val-tools-distinct" class="tabular">0 unique</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tool Spectrum (Segmented bar & legend) -->
+      <section class="tool-spectrum-section">
+        <div class="spectrum-header">
+          <span>Tool Spectrum</span>
+          <span id="spectrum-total" class="tabular mono">0 calls</span>
+        </div>
+        <div id="spectrum-bar" class="segmented-bar"></div>
+        <div id="spectrum-legend" class="spectrum-legend"></div>
+      </section>
+    </main>
+
+    <!-- TAB 2: TRACES -->
+    <section id="pane-traces" class="tab-pane" role="tabpanel">
+      <div class="section-bar">
+        <div class="section-heading">
+          <svg class="icon" viewBox="0 0 24 24">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          <span>Activity Timeline</span>
+        </div>
+        <div class="tab-group">
+          <button id="tab-all" class="tab-btn active">All</button>
+          <button id="tab-errors" class="tab-btn error-tab">Errors (<span id="err-count-badge" class="tabular">0</span>)</button>
+        </div>
+      </div>
+
+      <div id="waterfall-feed" class="waterfall-feed">
+        <div class="empty-state">Waiting for agent activity...</div>
+      </div>
+    </section>
+
+    <!-- TAB 3: FILES -->
+    <section id="pane-files" class="tab-pane" role="tabpanel">
+      <div class="section-bar">
+        <div class="section-heading">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+            <polyline points="13 2 13 9 20 9"/>
+          </svg>
+          <span>Modified Code Footprint</span>
+        </div>
+        <span id="files-summary-count" class="tabular mono" style="font-size: 10px; color: var(--muted-foreground);">0 files</span>
+      </div>
+
+      <div id="files-list" class="files-list">
+        <div class="empty-state">No files written or edited in this session yet.</div>
+      </div>
+    </section>
+
+    <!-- TAB 4: STEER -->
+    <section id="pane-steer" class="tab-pane" role="tabpanel">
+      <!-- Quick Action Chips Card -->
+      <div class="steer-card">
+        <div class="steer-card-title">
+          <svg class="icon" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="10 8 16 12 10 16 10 8"/>
+          </svg>
+          <span>Quick Actions</span>
+        </div>
+        <div class="steer-actions">
+          <button id="btn-pause" class="action-chip" title="Request explanation">
+            <svg class="icon" viewBox="0 0 24 24">
+              <rect x="6" y="4" width="4" height="16"/>
+              <rect x="14" y="4" width="4" height="16"/>
+            </svg>
+            <span>Pause &amp; Explain</span>
+          </button>
+          <button id="btn-tests" class="action-chip" title="Run tests">
+            <svg class="icon" viewBox="0 0 24 24">
+              <path d="M10 2v7.31L4.69 19.3A2 2 0 0 0 6.4 22h11.2a2 2 0 0 0 1.71-2.7L14 9.31V2"/>
+              <line x1="8.5" y1="2" x2="15.5" y2="2"/>
+            </svg>
+            <span>Run Tests</span>
+          </button>
+          <button id="btn-review" class="action-chip" title="Review diffs">
+            <svg class="icon" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <span>Review Diffs</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Freeform Injection Card -->
+      <div class="steer-card">
+        <div class="steer-card-title">
+          <svg class="icon" viewBox="0 0 24 24">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+          <span>Inject Guidance Prompt</span>
+        </div>
+        <div class="steer-input-bar">
+          <input type="text" id="steer-input" class="steer-input" placeholder="Type instruction for agent..." />
+          <button id="btn-send-steer" class="btn-send-chip">
+            <span>Send</span>
+            <svg class="icon" style="width: 10px; height: 10px;" viewBox="0 0 24 24">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Export Report Card -->
+      <div class="steer-card">
+        <div class="steer-card-title">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <span>Session Export</span>
+        </div>
+        <button id="btn-copy-report" class="btn-report">
+          <svg class="icon" viewBox="0 0 24 24">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          <span>Copy Markdown Trace Report</span>
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <!-- Toast Notification Bar -->
+  <div id="toast" class="toast-bar">
+    <svg class="icon" style="color: var(--success);" viewBox="0 0 24 24">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+    <span id="toast-msg">Instruction sent</span>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
