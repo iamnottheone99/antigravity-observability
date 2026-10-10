@@ -12,55 +12,63 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
 
 ---
 
-## ✨ Features
+## Features
 
-* **💰 Live Cost & Cache Hit Analytics**:
+* **Live Cost & Cache Hit Analytics**:
   - Calculates real-time dollar cost with discounted prompt caching.
   - Mathematically bounded Prompt Cache Hit Rate gauge ($\frac{\text{cached}}{\text{uncached} + \text{cached}} \times 100\%$).
   - Breakdown of fresh prompt tokens, cached prompt hits, and completion tokens.
-* **⚡ Vertical Waterfall Trace Timeline**:
+* **Vertical Waterfall Trace Timeline**:
   - Full-height continuous execution rail with duration tags (`+1.2s`) and status indicators.
   - Click-to-expand details showing exact tool arguments, commands executed, and timestamps.
   - Instant toggle to isolate errors and failed tool runs (`Exit Status 1`).
-* **🎯 Human-in-the-Loop Steering**:
+* **Human-in-the-Loop Steering**:
   - Quick action chips: `Pause & Explain`, `Run Tests`, and `Review Diffs`.
   - Inline prompt injector to steer the agent directly from the side panel.
   - One-click **Copy Markdown Report** for sharing session traces in PRs or issues.
-* **🛡️ Loop & Stall Radar**:
+* **Loop & Stall Radar**:
   - Sliding-window signature detector that flags repetitive tool calls ($\ge 3$ consecutive executions with identical arguments).
-* **📊 Categorical Tool Spectrum**:
+* **Categorical Tool Spectrum**:
   - Segmented distribution bar grouping calls into File Edits, Shell/Terminal, Search/Read, and Subagents.
-* **🔄 Seamless Multi-Chat Auto Tracking**:
+* **Seamless Multi-Chat Auto Tracking**:
   - Automatically queries Antigravity's `conversation_summaries.db` with graceful fallback to brain directory scans across all Node.js 20+ runtimes.
   - **Auto** mode dynamically follows whichever conversation was modified most recently.
-* **⏻ In-UI Monitoring Toggle**:
-  - One-click `[ ⏻ ON / OFF ]` button to pause and resume live polling without closing or unmounting the extension.
+* **In-UI Monitoring Toggle**:
+  - One-click `[ ON / OFF ]` button to pause and resume live polling without closing or unmounting the extension.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
+
+![Antigravity Observability Architecture](docs/architecture.png)
+
+*An interactive version with path tracing, dark/light themes, and export controls is available at [docs/architecture.html](docs/architecture.html).*
 
 ```mermaid
 flowchart LR
-    subgraph Antigravity Engine
-        Agent[Agent Execution Loop] -->|Streams| Transcript["transcript.jsonl (tokens, tool calls)"]
-        Agent -->|Updates| DB["conversation_summaries.db (titles, mtime)"]
+    subgraph AntigravityEngine["Antigravity Engine"]
+        Agent["Agent Execution Loop"] -->|Streams| Transcript["transcript.jsonl (tokens, tools)"]
+        Agent -->|Updates| DB["conversation_summaries.db (titles)"]
     end
 
-    subgraph Sidecar Extension Backend
+    subgraph SidecarBackend["Sidecar Backend"]
         Backend["main.mjs + telemetry.mjs"] -.->|Reads| Transcript
         Backend -.->|Dynamic SQLite / Scan| DB
     end
 
-    subgraph IDE Auxiliary Side Pane
-        Bridge["/preload.js (window.sidecar)"] <-->|IPC / HTTP| Backend
-        Frontend["index.html + app.js (4-Tab UI)"] <--> Bridge
+    subgraph AuxPane["Auxiliary Side Pane UI"]
+        Bridge["preload.js (window.sidecar)"]
+        Frontend["index.html + app.js (4-Tab UI)"]
+        Frontend -->|IPC / DOM Events| Bridge
+        Bridge -->|HTTP IPC| Backend
+        Backend -->|Telemetry Metrics| Bridge
+        Bridge -->|State Updates| Frontend
     end
 ```
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 * **Node.js 20+** installed
@@ -88,7 +96,7 @@ npm run install-plugin
 
 ---
 
-## 📁 Repository Layout
+## Repository Layout
 
 ```text
 antigravity-observability/
@@ -119,7 +127,7 @@ antigravity-observability/
 
 ---
 
-## 🧪 Testing & Verification
+## Testing & Verification
 
 Run the automated test suite to verify unit tests, calculations, and manifests:
 
@@ -129,7 +137,7 @@ npm test
 
 ---
 
-## 📖 Documentation
+## Documentation
 
 * [API Reference](docs/API.md) — Sidecar HTTP routes, schema, and pricing formulas.
 * [Contributing Guide](CONTRIBUTING.md) — Development setup and contribution workflow.
@@ -137,6 +145,6 @@ npm test
 
 ---
 
-## 📄 License
+## License
 
 Distributed under the MIT License. See [`LICENSE`](LICENSE) for more details.
