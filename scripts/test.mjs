@@ -242,6 +242,47 @@ runTest('parseTranscript aggregates token metrics, steps, latencies, and touched
   assert.equal(report.recentSteps[0].durationSeconds, 2.5);
 });
 
+runTest('parseTranscript captures rich arguments, tool outputs, thinking, and per-step economics', () => {
+  const sampleLog = [
+    JSON.stringify({
+      step_index: 10,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-10-10T12:00:00.000Z',
+      input_tokens: 500,
+      cache_read_tokens: 1500,
+      output_tokens: 100,
+      thinking: 'Need to check git branch first.',
+      tool_calls: [
+        {
+          name: 'run_command',
+          args: { CommandLine: 'git status', toolAction: 'Checking git status' },
+        },
+      ],
+    }),
+    JSON.stringify({
+      step_index: 11,
+      source: 'SYSTEM',
+      type: 'GENERIC',
+      status: 'DONE',
+      content: 'On branch main\nnothing to commit',
+      created_at: '2026-10-10T12:00:01.000Z',
+    }),
+  ].join('\n');
+
+  const report = parseTranscript(sampleLog, { conversationId: 'conv-detail' });
+  const step = report.recentSteps[1]; // step 10 in reversed array
+
+  assert.equal(step.stepIndex, 10);
+  assert.equal(step.thinking, 'Need to check git branch first.');
+  assert.equal(step.outputSnippet, 'On branch main\nnothing to commit');
+  assert.equal(step.totalStepTokens, 2100);
+  assert.equal(step.tools[0].primaryArg, '$ git status');
+  assert.equal(step.tools[0].args.CommandLine, 'git status');
+  assert.equal(step.tools[0].category, 'shell');
+});
+
 // -----------------------------------------------------------------------------
 // 4. Frontend Helper Unit Tests
 // -----------------------------------------------------------------------------

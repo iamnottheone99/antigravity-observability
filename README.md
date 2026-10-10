@@ -18,10 +18,13 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
   - Calculates real-time dollar cost with discounted prompt caching.
   - Mathematically bounded Prompt Cache Hit Rate gauge ($\frac{\text{cached}}{\text{uncached} + \text{cached}} \times 100\%$).
   - Breakdown of fresh prompt tokens, cached prompt hits, and completion tokens.
-* **Vertical Waterfall Trace Timeline**:
+* **Vertical Waterfall Trace Timeline & Deep Inspector**:
   - Full-height continuous execution rail with duration tags (`+1.2s`) and status indicators.
-  - Click-to-expand details showing exact tool arguments, commands executed, and timestamps.
-  - Instant toggle to isolate errors and failed tool runs (`Exit Status 1`).
+  - Expandable detail drawers showing structured tool arguments, exact command lines, and target files.
+  - Live execution output previews displaying terminal stdout, stderr, and tool result snippets with one-click copy.
+  - Model reasoning & strategy preview exposing agent thinking (`step.thinking`) prior to tool calls.
+  - Per-step token economics tracking input tokens, cache hits, output tokens, and dollar cost per step.
+  - Real-time search bar to filter traces by tool, file, command, or text, alongside domain filter chips (`All`, `Tools`, `Errors`) and `Expand All` controls.
 * **Human-in-the-Loop Steering**:
   - Quick action chips: `Pause & Explain`, `Run Tests`, and `Review Diffs`.
   - Inline prompt injector to steer the agent directly from the side panel.

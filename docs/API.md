@@ -98,12 +98,24 @@ Fetches real-time token metrics, latency, step history, and error logs for a ses
       "createdAt": "2026-10-10T14:22:01.000Z",
       "durationSeconds": 1.4,
       "inputTokens": 120,
+      "cacheReadTokens": 1400,
       "outputTokens": 80,
+      "totalStepTokens": 1600,
+      "stepCost": "$0.0001",
+      "category": "file",
+      "thinking": "Inspecting package.json dependencies...",
+      "outputSnippet": "{\n  \"name\": \"antigravity-observability\"...\n}",
       "tools": [
         {
           "name": "view_file",
           "summary": "View package.json",
-          "action": "Viewing file"
+          "action": "Viewing file",
+          "primaryArg": "c:/project/package.json",
+          "category": "file",
+          "args": {
+            "AbsolutePath": "c:/project/package.json"
+          },
+          "output": "{\n  \"name\": \"antigravity-observability\"...\n}"
         }
       ]
     }

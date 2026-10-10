@@ -2,6 +2,18 @@
 
 All notable changes to the Antigravity Observability Companion will be documented in this file.
 
+## [1.1.0] - 2026-10-10
+
+### Added
+- **Deep Trace Inspector**: Individual trace timeline cards now expand into structured drawers containing:
+  - **Reasoning & Strategy**: Displays model `thinking` (chain of thought) explaining why each action was taken.
+  - **Arguments Grid**: Clean key-value breakdown of tool arguments with unquoted, readable values.
+  - **Execution Output Preview**: Scrollable terminal box showing tool stdout, stderr, exit codes, and error logs with one-click copy.
+  - **Step-Level Token Economics**: Per-step metrics tracking fresh prompt tokens, cache reads, completion tokens, duration, and dollar cost.
+- **Trace Search & Filters**: Live search input to filter traces by tool, command, file, or keyword, alongside category filter chips (`All`, `Tools`, `Errors`).
+- **Expand/Collapse All**: Toolbar button to expand or collapse all displayed trace cards simultaneously.
+- **Visual Category Pills**: Timeline badges color-coding events by domain (`SHELL`, `FILE`, `SEARCH`, `MCP`, `AGENT`, `USER`, `ASSISTANT`).
+
 ## [1.0.1] - 2026-10-10
 
 ### Fixed
