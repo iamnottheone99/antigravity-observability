@@ -95,6 +95,61 @@ export function detectRepetitionLoop(recentToolCalls = [], threshold = 3) {
 }
 
 /**
+ * Cleans string argument values by stripping outer quotes and parsing JSON if applicable.
+ */
+function cleanArgValue(val) {
+  if (typeof val !== 'string') return val;
+  const trimmed = val.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed.slice(1, -1);
+    }
+  }
+  return trimmed;
+}
+
+/**
+ * Extracts a concise human-readable primary argument string from a tool call.
+ */
+function extractPrimaryArg(name, args = {}) {
+  const clean = {};
+  for (const [k, v] of Object.entries(args)) {
+    clean[k] = cleanArgValue(v);
+  }
+
+  switch (name) {
+    case 'run_command':
+      return clean.CommandLine ? `$ ${clean.CommandLine}` : '';
+    case 'view_file': {
+      const path = clean.AbsolutePath || clean.TargetFile || '';
+      const range = clean.StartLine ? `:${clean.StartLine}${clean.EndLine ? `-${clean.EndLine}` : ''}` : '';
+      return path ? `${path}${range}` : '';
+    }
+    case 'write_to_file':
+      return clean.TargetFile ? `Create ${clean.TargetFile}` : '';
+    case 'replace_file_content': {
+      const path = clean.TargetFile || '';
+      const range = clean.StartLine ? ` (L${clean.StartLine}-L${clean.EndLine})` : '';
+      return path ? `Edit ${path}${range}` : '';
+    }
+    case 'call_mcp_tool':
+      return clean.ServerName && clean.ToolName ? `${clean.ServerName}:${clean.ToolName}` : (clean.ToolName || '');
+    case 'search_web':
+      return clean.query ? `"${clean.query}"` : '';
+    case 'read_url_content':
+      return clean.Url || '';
+    case 'manage_task':
+      return clean.Action ? `${clean.Action} (${clean.TaskId || ''})` : '';
+    case 'send_message':
+      return clean.Recipient ? `To: ${clean.Recipient}` : '';
+    default:
+      return clean.TargetFile || clean.AbsolutePath || clean.query || clean.CommandLine || clean.Url || '';
+  }
+}
+
+/**
  * Parses raw JSONL transcript data into structured telemetry metrics.
  *
  * @param {string} rawTranscript Raw contents of transcript.jsonl
@@ -120,67 +175,151 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
   const failedSteps = [];
   const recentToolCalls = [];
 
+  const rawSteps = [];
   for (let i = 0; i < lines.length; i++) {
     try {
-      const step = JSON.parse(lines[i]);
-
-      if (typeof step.input_tokens === 'number') totalInputTokens += step.input_tokens;
-      if (typeof step.cache_read_tokens === 'number') totalCacheTokens += step.cache_read_tokens;
-      if (typeof step.output_tokens === 'number') totalOutputTokens += step.output_tokens;
-
-      const isError = step.status === 'ERROR' ||
-        (typeof step.content === 'string' && (
-          step.content.includes('"exit status 1"') ||
-          step.content.includes('Encountered error in tool execution')
-        ));
-
-      const toolsInStep = [];
-      if (Array.isArray(step.tool_calls)) {
-        for (const tc of step.tool_calls) {
-          const name = tc.name || 'unknown_tool';
-          toolCounts[name] = (toolCounts[name] || 0) + 1;
-
-          const target = tc.args?.TargetFile || tc.args?.AbsolutePath;
-          if (target && typeof target === 'string') {
-            filesTouched.add(target.replace(/^"|"$/g, ''));
-          }
-
-          const toolSummary = tc.args?.toolSummary ? String(tc.args.toolSummary).replace(/^"|"$/g, '') : '';
-          const toolAction = tc.args?.toolAction ? String(tc.args.toolAction).replace(/^"|"$/g, '') : '';
-          const signature = `${name}:${tc.args?.CommandLine || tc.args?.AbsolutePath || tc.args?.TargetFile || ''}`;
-
-          recentToolCalls.push({
-            name,
-            signature,
-            stepIndex: step.step_index ?? i,
-          });
-
-          toolsInStep.push({
-            name,
-            summary: toolSummary,
-            action: toolAction,
-          });
-        }
-      }
-
-      const stepRecord = {
-        stepIndex: step.step_index ?? i,
-        source: step.source || 'UNKNOWN',
-        type: step.type || 'UNKNOWN',
-        status: isError ? 'ERROR' : (step.status || 'DONE'),
-        createdAt: step.created_at || null,
-        inputTokens: step.input_tokens || 0,
-        outputTokens: step.output_tokens || 0,
-        tools: toolsInStep,
-      };
-
-      parsedSteps.push(stepRecord);
-
-      if (isError) {
-        failedSteps.push(stepRecord);
-      }
+      rawSteps.push(JSON.parse(lines[i]));
     } catch {
       // Ignore trailing malformed or partial JSON lines
+    }
+  }
+
+  for (let i = 0; i < rawSteps.length; i++) {
+    const step = rawSteps[i];
+
+    if (typeof step.input_tokens === 'number') totalInputTokens += step.input_tokens;
+    if (typeof step.cache_read_tokens === 'number') totalCacheTokens += step.cache_read_tokens;
+    if (typeof step.output_tokens === 'number') totalOutputTokens += step.output_tokens;
+
+    // Check next step for paired tool output if this step called tools
+    const nextStep = rawSteps[i + 1];
+    let outputSnippet = '';
+    let pairedError = false;
+
+    if (Array.isArray(step.tool_calls) && step.tool_calls.length > 0 && nextStep) {
+      if (typeof nextStep.content === 'string' && nextStep.content.trim()) {
+        outputSnippet = nextStep.content.trim().slice(0, 2500);
+        if (
+          nextStep.status === 'ERROR' ||
+          nextStep.content.includes('"exit status 1"') ||
+          nextStep.content.includes('Encountered error in') ||
+          nextStep.content.includes('Error:')
+        ) {
+          pairedError = true;
+        }
+      } else if (nextStep.status === 'ERROR') {
+        pairedError = true;
+      }
+    } else if (typeof step.content === 'string' && step.content.trim()) {
+      outputSnippet = step.content.trim().slice(0, 2500);
+    }
+
+    const isError = step.status === 'ERROR' ||
+      (typeof step.content === 'string' && (
+        step.content.includes('"exit status 1"') ||
+        step.content.includes('Encountered error in tool execution')
+      ));
+
+    // Thinking / reasoning preview
+    const thinkingSnippet = typeof step.thinking === 'string' && step.thinking.trim()
+      ? step.thinking.trim().slice(0, 1500)
+      : '';
+
+    // Extract user request snippet if this is a user input step
+    let userPrompt = '';
+    if (step.type === 'USER_INPUT' || step.source === 'USER_EXPLICIT') {
+      const text = step.content || '';
+      const reqMatch = text.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
+      userPrompt = reqMatch ? reqMatch[1].trim() : text.trim().slice(0, 500);
+    }
+
+    const toolsInStep = [];
+    if (Array.isArray(step.tool_calls)) {
+      for (const tc of step.tool_calls) {
+        const name = tc.name || 'unknown_tool';
+        toolCounts[name] = (toolCounts[name] || 0) + 1;
+
+        const target = tc.args?.TargetFile || tc.args?.AbsolutePath;
+        if (target && typeof target === 'string') {
+          filesTouched.add(target.replace(/^"|"$/g, ''));
+        }
+
+        const toolSummary = tc.args?.toolSummary ? cleanArgValue(tc.args.toolSummary) : '';
+        const toolAction = tc.args?.toolAction ? cleanArgValue(tc.args.toolAction) : '';
+        const primaryArg = extractPrimaryArg(name, tc.args || {});
+
+        // Clean args for display (trim huge CodeContent to 400 chars)
+        const sanitizedArgs = {};
+        if (tc.args && typeof tc.args === 'object') {
+          for (const [k, v] of Object.entries(tc.args)) {
+            const cleaned = cleanArgValue(v);
+            if (typeof cleaned === 'string' && cleaned.length > 500) {
+              sanitizedArgs[k] = cleaned.slice(0, 500) + '... (truncated)';
+            } else {
+              sanitizedArgs[k] = cleaned;
+            }
+          }
+        }
+
+        const signature = `${name}:${tc.args?.CommandLine || tc.args?.AbsolutePath || tc.args?.TargetFile || ''}`;
+
+        recentToolCalls.push({
+          name,
+          signature,
+          stepIndex: step.step_index ?? i,
+        });
+
+        toolsInStep.push({
+          name,
+          summary: toolSummary,
+          action: toolAction,
+          primaryArg,
+          category: getToolCategory(name).id,
+          args: sanitizedArgs,
+          output: outputSnippet,
+        });
+      }
+    }
+
+    const stepInput = step.input_tokens || 0;
+    const stepCache = step.cache_read_tokens || 0;
+    const stepOutput = step.output_tokens || 0;
+    const totalStepTokens = stepInput + stepCache + stepOutput;
+    const stepCost = calculateCost(stepInput, stepCache, stepOutput);
+
+    // Primary category
+    let category = 'system';
+    if (toolsInStep.length > 0) {
+      category = toolsInStep[0].category;
+    } else if (step.type === 'USER_INPUT' || step.source === 'USER_EXPLICIT') {
+      category = 'user';
+    } else if (step.source === 'MODEL' && step.type === 'PLANNER_RESPONSE') {
+      category = 'assistant';
+    }
+
+    const stepRecord = {
+      stepIndex: step.step_index ?? i,
+      source: step.source || 'UNKNOWN',
+      type: step.type || 'UNKNOWN',
+      status: isError ? 'ERROR' : (step.status || 'DONE'),
+      createdAt: step.created_at || null,
+      inputTokens: stepInput,
+      cacheReadTokens: stepCache,
+      outputTokens: stepOutput,
+      totalStepTokens,
+      stepCost,
+      tools: toolsInStep,
+      thinking: thinkingSnippet,
+      content: typeof step.content === 'string' ? step.content.trim().slice(0, 1500) : '',
+      userPrompt,
+      outputSnippet,
+      category,
+    };
+
+    parsedSteps.push(stepRecord);
+
+    if (isError) {
+      failedSteps.push(stepRecord);
     }
   }
 
@@ -219,8 +358,8 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
     loopDetected,
     toolCounts,
     filesTouched: Array.from(filesTouched),
-    failedSteps: failedSteps.slice(-10).reverse(),
-    recentSteps: parsedSteps.slice(-25).reverse(),
+    failedSteps: failedSteps.slice(-50).reverse(),
+    recentSteps: parsedSteps.slice(-100).reverse(),
   };
 }
 

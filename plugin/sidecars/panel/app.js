@@ -4,7 +4,8 @@
   const sidecar = window.sidecar;
   const $ = (id) => document.getElementById(id);
 
-  let currentMode = 'all'; // 'all' | 'errors'
+  let currentMode = 'all'; // 'all' | 'tools' | 'errors'
+  let traceSearchQuery = '';
   let lastTelemetryData = null;
   let toastTimer = null;
   let selectedConversationId = 'auto'; // 'auto' or explicit uuid
@@ -133,14 +134,43 @@
   function renderWaterfall() {
     if (!lastTelemetryData) return;
     const feedEl = $('waterfall-feed');
-    const items = currentMode === 'errors'
-      ? (lastTelemetryData.failedSteps || [])
-      : (lastTelemetryData.recentSteps || []);
+    let items = lastTelemetryData.recentSteps || [];
+
+    if (currentMode === 'errors') {
+      items = lastTelemetryData.failedSteps || [];
+    } else if (currentMode === 'tools') {
+      items = items.filter(s => s.tools && s.tools.length > 0);
+    }
+
+    if (traceSearchQuery) {
+      const q = traceSearchQuery.toLowerCase();
+      items = items.filter(s => {
+        if (String(s.stepIndex).includes(q)) return true;
+        if (s.category && s.category.toLowerCase().includes(q)) return true;
+        if (s.tools && s.tools.some(t =>
+          t.name.toLowerCase().includes(q) ||
+          (t.primaryArg && t.primaryArg.toLowerCase().includes(q)) ||
+          (t.summary && t.summary.toLowerCase().includes(q)) ||
+          (t.action && t.action.toLowerCase().includes(q))
+        )) return true;
+        if (s.thinking && s.thinking.toLowerCase().includes(q)) return true;
+        if (s.userPrompt && s.userPrompt.toLowerCase().includes(q)) return true;
+        if (s.outputSnippet && s.outputSnippet.toLowerCase().includes(q)) return true;
+        if (s.content && s.content.toLowerCase().includes(q)) return true;
+        return false;
+      });
+    }
+
+    const totalAvailable = (lastTelemetryData.recentSteps || []).length;
+    const countLabel = $('traces-count-label');
+    if (countLabel) {
+      countLabel.textContent = `${items.length} / ${totalAvailable}`;
+    }
 
     if (items.length === 0) {
       feedEl.innerHTML = currentMode === 'errors'
         ? '<div class="empty-state">No errors recorded in this trace.</div>'
-        : '<div class="empty-state">Waiting for agent activity...</div>';
+        : (traceSearchQuery ? '<div class="empty-state">No traces match your search filter.</div>' : '<div class="empty-state">Waiting for agent activity...</div>');
       return;
     }
 
@@ -153,32 +183,143 @@
       if (s.tools && s.tools.length > 0) {
         toolHtml = s.tools.map(t => `
           <span class="tool-name-tag mono">${escapeHtml(t.name)}</span>
+          ${t.primaryArg ? `<span class="primary-arg mono" title="${escapeHtml(t.primaryArg)}">${escapeHtml(t.primaryArg)}</span>` : ''}
           <span class="node-summary">${escapeHtml(t.summary || t.action || '')}</span>
         `).join('');
 
+        const reasoningBlock = s.thinking ? `
+          <div class="drawer-section reasoning-section">
+            <div class="drawer-section-title">
+              <span>Reasoning & Strategy</span>
+            </div>
+            <div class="reasoning-text">${escapeHtml(s.thinking)}</div>
+          </div>
+        ` : '';
+
+        const argsBlocks = s.tools.map(t => {
+          const argEntries = Object.entries(t.args || {});
+          if (argEntries.length === 0) return '';
+          return `
+            <div class="drawer-section">
+              <div class="drawer-section-title">
+                <span>Arguments: ${escapeHtml(t.name)}</span>
+                ${t.action ? `<span style="font-weight: 400; text-transform: none; color: var(--muted-foreground);">${escapeHtml(t.action)}</span>` : ''}
+              </div>
+              <div class="args-grid mono">
+                ${argEntries.map(([k, v]) => `
+                  <div class="arg-row">
+                    <span class="arg-key">${escapeHtml(k)}:</span>
+                    <span class="arg-val">${escapeHtml(typeof v === 'object' ? JSON.stringify(v) : String(v))}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        const outputBlock = s.outputSnippet ? `
+          <div class="drawer-section output-section">
+            <div class="drawer-section-title">
+              <span>Execution Output / Result</span>
+              <button class="btn-copy-mini" type="button" data-copy="${escapeHtml(s.outputSnippet)}" title="Copy output snippet">Copy</button>
+            </div>
+            <pre class="output-preview mono ${isErr ? 'has-error' : ''}">${escapeHtml(s.outputSnippet)}</pre>
+          </div>
+        ` : '';
+
+        const footerMetrics = `
+          <div class="drawer-footer-metrics mono">
+            <span>Tokens: In ${formatTokens(s.inputTokens)} · Cache ${formatTokens(s.cacheReadTokens || 0)} · Out ${formatTokens(s.outputTokens)}</span>
+            <span>Est. Cost: ${s.stepCost || '$0.0000'}</span>
+            <span>Duration: +${s.durationSeconds || 0}s</span>
+            <span>Time: ${escapeHtml(s.createdAt ? new Date(s.createdAt).toLocaleTimeString() : 'N/A')}</span>
+          </div>
+        `;
+
         drawerHtml = `
           <div class="node-drawer">
-            ${s.tools.map(t => `
-              <div><strong>${escapeHtml(t.name)}</strong>: ${escapeHtml(t.action || t.summary || 'Executed')}</div>
-            `).join('')}
-            <div style="margin-top: 3px; color: var(--muted-foreground);">Timestamp: ${escapeHtml(s.createdAt || 'N/A')}</div>
+            ${reasoningBlock}
+            ${argsBlocks}
+            ${outputBlock}
+            ${footerMetrics}
+          </div>
+        `;
+      } else if (s.category === 'user' || s.type === 'USER_INPUT') {
+        toolHtml = `
+          <span class="tool-name-tag mono" style="color: #4ade80;">User Request</span>
+          <span class="node-summary">${escapeHtml(s.userPrompt || s.content || '')}</span>
+        `;
+        drawerHtml = `
+          <div class="node-drawer">
+            <div class="drawer-section">
+              <div class="drawer-section-title">User Prompt</div>
+              <pre class="output-preview mono" style="color: var(--foreground);">${escapeHtml(s.content || s.userPrompt || '')}</pre>
+            </div>
+            <div class="drawer-footer-metrics mono">
+              <span>Time: ${escapeHtml(s.createdAt ? new Date(s.createdAt).toLocaleTimeString() : 'N/A')}</span>
+            </div>
+          </div>
+        `;
+      } else if (s.category === 'assistant' || (s.source === 'MODEL' && s.type === 'PLANNER_RESPONSE')) {
+        toolHtml = `
+          <span class="tool-name-tag mono" style="color: #22d3ee;">Assistant Response</span>
+          <span class="node-summary">${escapeHtml((s.content || '').slice(0, 100))}</span>
+        `;
+        drawerHtml = `
+          <div class="node-drawer">
+            ${s.thinking ? `
+              <div class="drawer-section reasoning-section">
+                <div class="drawer-section-title">Thinking</div>
+                <div class="reasoning-text">${escapeHtml(s.thinking)}</div>
+              </div>
+            ` : ''}
+            ${s.content ? `
+              <div class="drawer-section">
+                <div class="drawer-section-title">Response Content</div>
+                <pre class="output-preview mono" style="color: var(--foreground);">${escapeHtml(s.content)}</pre>
+              </div>
+            ` : ''}
+            <div class="drawer-footer-metrics mono">
+              <span>Tokens: In ${formatTokens(s.inputTokens)} · Cache ${formatTokens(s.cacheReadTokens || 0)} · Out ${formatTokens(s.outputTokens)}</span>
+              <span>Time: ${escapeHtml(s.createdAt ? new Date(s.createdAt).toLocaleTimeString() : 'N/A')}</span>
+            </div>
           </div>
         `;
       } else {
-        toolHtml = `<span class="node-summary" style="color: var(--secondary-foreground);">${escapeHtml(s.source)} · ${escapeHtml(s.type)}</span>`;
+        toolHtml = `<span class="node-summary" style="color: var(--secondary-foreground);">${escapeHtml(s.source)} · ${escapeHtml(s.type)}: ${escapeHtml((s.content || '').slice(0, 80))}</span>`;
+        if (s.content) {
+          drawerHtml = `
+            <div class="node-drawer">
+              <div class="drawer-section output-section">
+                <div class="drawer-section-title">Content</div>
+                <pre class="output-preview mono">${escapeHtml(s.content)}</pre>
+              </div>
+            </div>
+          `;
+        }
       }
 
       const durationHtml = s.durationSeconds > 0
         ? `<span class="duration-chip tabular mono">+${s.durationSeconds}s</span>`
         : '';
 
+      const tokenChip = s.totalStepTokens > 0
+        ? `<span class="step-tokens-tag tabular mono" title="In: ${formatTokens(s.inputTokens)} | Cache: ${formatTokens(s.cacheReadTokens || 0)} | Out: ${formatTokens(s.outputTokens)}">${formatTokens(s.totalStepTokens)} tok</span>`
+        : '';
+
+      const categoryPill = `<span class="category-pill category-${s.category || 'system'}">${escapeHtml((s.category || 'step').toUpperCase())}</span>`;
+
       return `
         <div class="waterfall-node ${isErr ? 'error' : ''} ${isExpanded ? 'expanded' : ''}" data-step="${s.stepIndex}">
           <div class="waterfall-bullet"></div>
           <div class="node-card">
             <div class="node-header">
-              <span class="node-step-tag tabular mono">#${s.stepIndex}</span>
+              <div style="display: flex; align-items: center; gap: 5px;">
+                <span class="node-step-tag tabular mono">#${s.stepIndex}</span>
+                ${categoryPill}
+              </div>
               <div class="node-timing">
+                ${tokenChip}
                 ${durationHtml}
                 <span class="status-badge ${isErr ? 'has-errors' : ''}" style="font-size: 8.5px; padding: 1px 4px;">
                   ${escapeHtml(s.status)}
@@ -437,8 +578,20 @@ ${fileLines}
       });
     });
 
-    // Event delegation on #waterfall-feed to toggle drawer expansion & preserve across polls
+    // Event delegation on #waterfall-feed to toggle drawer expansion & copy output snippets
     $('waterfall-feed').addEventListener('click', (e) => {
+      const copyBtn = e.target.closest('.btn-copy-mini');
+      if (copyBtn) {
+        e.stopPropagation();
+        const text = copyBtn.getAttribute('data-copy');
+        if (text) {
+          navigator.clipboard.writeText(text)
+            .then(() => showToast('Copied output!'))
+            .catch(() => showToast('Clipboard failed'));
+        }
+        return;
+      }
+
       const node = e.target.closest('.waterfall-node');
       if (!node) return;
       const stepIdx = Number(node.getAttribute('data-step'));
@@ -493,6 +646,15 @@ ${fileLines}
     $('tab-all').addEventListener('click', () => {
       currentMode = 'all';
       $('tab-all').classList.add('active');
+      $('tab-tools')?.classList.remove('active');
+      $('tab-errors').classList.remove('active');
+      renderWaterfall();
+    });
+
+    $('tab-tools')?.addEventListener('click', () => {
+      currentMode = 'tools';
+      $('tab-tools').classList.add('active');
+      $('tab-all').classList.remove('active');
       $('tab-errors').classList.remove('active');
       renderWaterfall();
     });
@@ -501,8 +663,42 @@ ${fileLines}
       currentMode = 'errors';
       $('tab-errors').classList.add('active');
       $('tab-all').classList.remove('active');
+      $('tab-tools')?.classList.remove('active');
       renderWaterfall();
     });
+
+    // Traces Search Input
+    const traceSearchEl = $('trace-search-input');
+    if (traceSearchEl) {
+      traceSearchEl.addEventListener('input', (e) => {
+        traceSearchQuery = e.target.value.trim();
+        renderWaterfall();
+      });
+    }
+
+    // Expand/Collapse All Traces Toggle
+    const btnExpandAll = $('btn-toggle-expand-all');
+    if (btnExpandAll) {
+      btnExpandAll.addEventListener('click', () => {
+        const displayedNodes = Array.from(document.querySelectorAll('#waterfall-feed .waterfall-node'));
+        if (displayedNodes.length === 0) return;
+        const allExpanded = displayedNodes.every(n => n.classList.contains('expanded'));
+        if (allExpanded) {
+          displayedNodes.forEach(n => {
+            const idx = Number(n.getAttribute('data-step'));
+            expandedStepIndices.delete(idx);
+          });
+          btnExpandAll.textContent = 'Expand All';
+        } else {
+          displayedNodes.forEach(n => {
+            const idx = Number(n.getAttribute('data-step'));
+            expandedStepIndices.add(idx);
+          });
+          btnExpandAll.textContent = 'Collapse All';
+        }
+        renderWaterfall();
+      });
+    }
 
     // Session selector dropdown
     $('session-select').addEventListener('change', (e) => {
