@@ -94,42 +94,52 @@ body {
   justify-content: space-between;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.header-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 
 .header-title {
   font-size: 13px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.header-subtitle {
+  font-size: 9px;
+  font-weight: 500;
+  color: #60a5fa;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 130px;
+  display: block;
+  line-height: 1.1;
 }
 
 .header-right {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
-}
-
-.model-badge {
-  font-size: 9.5px;
-  font-weight: 500;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  background: rgba(59, 130, 246, 0.12);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 .session-dropdown {
@@ -139,7 +149,8 @@ body {
   border-radius: var(--radius-sm);
   font-size: 10px;
   padding: 2px 6px;
-  max-width: 220px;
+  max-width: 140px;
+  min-width: 85px;
   outline: none;
   cursor: pointer;
   text-overflow: ellipsis;
@@ -157,12 +168,13 @@ body {
   background: var(--secondary);
   border: 1px solid var(--border);
   color: var(--secondary-foreground);
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: var(--radius-sm);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
 .btn-power-toggle.active {
@@ -221,24 +233,26 @@ body {
 }
 
 .status-badge {
-  font-size: 9.5px;
+  display: none;
+  font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding: 2px 6px;
-  border-radius: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
   background: var(--secondary);
   color: var(--secondary-foreground);
-  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   border: 1px solid var(--border);
+  white-space: nowrap;
 }
 
-.status-badge.live {
-  background: var(--success-bg);
-  color: var(--success);
-  border-color: rgba(16, 185, 129, 0.25);
+.status-badge.has-errors {
+  display: inline-flex;
+  background: rgba(244, 63, 94, 0.12);
+  color: var(--danger);
+  border-color: rgba(244, 63, 94, 0.3);
 }
 
 /* Nav Tab Bar */
