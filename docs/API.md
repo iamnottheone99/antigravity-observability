@@ -15,20 +15,24 @@ Returns runtime metadata and health diagnostics.
 ```json
 {
   "status": "ok",
+  "version": "1.2.0",
   "node": "v22.5.0",
   "platform": "win32 10.0.26100",
   "uptimeSeconds": 142,
-  "sqliteAvailable": true
+  "sqliteAvailable": true,
+  "cachedTranscripts": 3
 }
 ```
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `status` | `string` | Always `"ok"` when running. |
+| `version` | `string` | Sidecar semantic version (e.g. `"1.2.0"`). |
 | `node` | `string` | Node.js runtime version. |
 | `platform` | `string` | Host operating system and kernel release. |
 | `uptimeSeconds` | `number` | Seconds elapsed since sidecar process boot. |
 | `sqliteAvailable` | `boolean` | `true` if Node's native `node:sqlite` engine is loaded. |
+| `cachedTranscripts` | `number` | Total transcript reports currently cached in memory. |
 
 ---
 
@@ -79,11 +83,24 @@ Fetches real-time token metrics, latency, step history, and error logs for a ses
   "totalTokens": 18550,
   "estimatedCost": "$0.0015",
   "cacheHitRate": "81.9%",
+  "cacheSavings": "$0.0016",
+  "latestContextTokens": 17700,
+  "peakContextTokens": 24500,
+  "contextLimit": 1000000,
+  "contextLoadPercent": "1.8%",
+  "compactionsCount": 1,
+  "activeModel": "Gemini 2.5 Pro",
+  "avgStepDuration": "2.1s",
+  "toolSuccessRate": "98.5%",
+  "subagentCalls": 1,
+  "mcpCalls": 4,
+  "artifactsCount": 2,
   "errorCount": 0,
   "loopDetected": null,
   "toolCounts": {
     "view_file": 6,
-    "run_command": 2
+    "run_command": 2,
+    "call_mcp_tool": 4
   },
   "filesTouched": [
     "c:/project/package.json"
@@ -130,8 +147,19 @@ Fetches real-time token metrics, latency, step history, and error logs for a ses
 ### Prompt Cache Hit Rate
 $$\text{Hit Rate} = \min\left(100\%, \frac{\text{Cache Read Tokens}}{\text{Fresh Input Tokens} + \text{Cache Read Tokens}} \times 100\%\right)$$
 
+### Prompt Cache Dollar Savings
+$$\text{Savings} = \text{Cache Read Tokens} \times (\$0.1500 - \$0.0375) \times 10^{-6} = \text{Cache Read Tokens} \times \$0.1125 \times 10^{-6}$$
+
 ### Cost Model (Gemini Pro/Flash Benchmark)
 $$\text{Cost} = (\text{Input} \times \$0.15 \times 10^{-6}) + (\text{Cache} \times \$0.0375 \times 10^{-6}) + (\text{Output} \times \$0.60 \times 10^{-6})$$
+
+### Context Window Utilization
+$$\text{Load} = \frac{\text{Latest Step Context Tokens}}{1,000,000} \times 100\%$$
+
+Amber load warning triggers at $\ge 70\%$, and critical red warning triggers at $\ge 85\%$.
+
+### Tool Reliability Rate
+$$\text{Reliability} = \left(1 - \frac{\text{Failed Tool Executions}}{\text{Total Tool Executions}}\right) \times 100\%$$
 
 ### Repetition Radar
 Detects when any tool call signature (`<toolName>:<args>`) appears $\ge 3$ times within a sliding window of the last 8 tool invocations.
