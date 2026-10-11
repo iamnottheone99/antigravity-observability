@@ -2,6 +2,20 @@
 
 All notable changes to the Antigravity Observability Companion will be documented in this file.
 
+## [1.2.0] - 2026-10-11
+
+### Added
+- **Context Window Utilization Gauge**: Visual capacity meter tracking token volume against Gemini's 1.0M token context limit, accompanied by session compaction counters.
+- **Prompt Cache Dollar Savings**: Real-time monetary savings calculator quantifying dollar savings achieved through Gemini prompt cache hits ($0.1125 / 1M cached tokens).
+- **Latency & Tool Reliability**: Added step turnaround latency (average duration per model turn) and tool call success rate percentage.
+- **Antigravity Ecosystem Metrics**: Dedicated overview cards tracking subagent delegations, MCP tool executions, artifact generations, and compaction events.
+- **MCP Spectrum Classification**: Tool distribution spectrum now breaks down Model Context Protocol tool invocations alongside shell, file, and web operations.
+- **Active Model Detection**: Header displays the active model identity (such as Gemini 2.5 Pro) derived from conversation transcripts.
+
+### Changed
+- **Decluttered Header Bar**: Restructured header layout by grouping title and model details vertically on the left and streamlining right-side controls, eliminating multi-row wrapping on narrow sidecar panels.
+- **Compact Power Controls**: Refactored live monitoring switch and session dropdown into a minimal footprint while suppressing redundant status indicators.
+
 ## [1.1.0] - 2026-10-10
 
 ### Added
