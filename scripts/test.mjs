@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   calculateCacheHitRate,
+  calculateCacheSavings,
   calculateCost,
   detectRepetitionLoop,
   escapeHtml,
@@ -41,7 +42,7 @@ console.log('📦 Manifest & Structure Checks:');
 runTest('plugin.json is valid and contains expected metadata', () => {
   const data = JSON.parse(readFileSync(join(PLUGIN, 'plugin.json'), 'utf8'));
   assert.equal(data.name, 'agent-observability');
-  assert.equal(data.version, '1.1.0');
+  assert.equal(data.version, '1.2.0');
   assert.ok(data.description && data.description.length > 0);
   assert.equal(data.logo, 'assets/logo.svg');
 });
@@ -58,13 +59,13 @@ runTest('sidecar.json defines auxiliary pane entrypoint', () => {
 runTest('sidecars package.json defines ES module and matches version', () => {
   const data = JSON.parse(readFileSync(join(PLUGIN, 'sidecars/panel/package.json'), 'utf8'));
   assert.equal(data.type, 'module');
-  assert.equal(data.version, '1.1.0');
+  assert.equal(data.version, '1.2.0');
 });
 
 runTest('root package.json is valid and declares engines', () => {
   const data = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   assert.equal(data.name, 'antigravity-observability');
-  assert.equal(data.version, '1.1.0');
+  assert.equal(data.version, '1.2.0');
   assert.equal(data.type, 'module');
   assert.ok(data.engines?.node, 'Missing engines.node definition');
 });
@@ -130,6 +131,12 @@ runTest('calculateCost applies Gemini benchmark pricing formula', () => {
   assert.equal(calculateCost(0, 1000000, 0), '$0.0375');
   assert.equal(calculateCost(0, 0, 1000000), '$0.6000');
   assert.equal(calculateCost(10000, 20000, 5000), '$0.0053');
+});
+
+runTest('calculateCacheSavings computes 75% prompt cache discount savings', () => {
+  assert.equal(calculateCacheSavings(0), '$0.0000');
+  assert.equal(calculateCacheSavings(1000000), '$0.1125');
+  assert.equal(calculateCacheSavings(500000), '$0.0562');
 });
 
 runTest('detectRepetitionLoop detects strictly consecutive identical tool calls', () => {
@@ -233,6 +240,12 @@ runTest('parseTranscript aggregates token metrics, steps, latencies, and touched
   assert.equal(report.outputTokens, 50);
   assert.equal(report.totalTokens, 650);
   assert.equal(report.cacheHitRate, '50.0%');
+  assert.equal(report.cacheSavings, '$0.0000');
+  assert.equal(report.latestContextTokens, 500);
+  assert.equal(report.contextLoadPercent, '0.1%');
+  assert.equal(report.activeModel, 'Gemini');
+  assert.equal(report.toolSuccessRate, '50.0%');
+  assert.equal(report.avgStepDuration, '2.5s');
   assert.equal(report.errorCount, 1);
   assert.equal(report.failedSteps.length, 1);
   assert.deepEqual(report.filesTouched, ['c:/project/src/index.js']);
@@ -286,6 +299,40 @@ runTest('parseTranscript captures rich arguments, tool outputs, thinking, and pe
   assert.equal(step.tools[0].category, 'shell');
 });
 
+runTest('parseTranscript detects model settings changes, compactions, and subagents', () => {
+  const log = [
+    JSON.stringify({
+      step_index: 0,
+      source: 'USER_EXPLICIT',
+      type: 'USER_INPUT',
+      content: 'The user changed setting `Model Selection` from None to Gemini 3.8 Flash (High).\n<CONTEXT_SUMMARY>Compacted session</CONTEXT_SUMMARY>',
+    }),
+    JSON.stringify({
+      step_index: 1,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      input_tokens: 1500,
+      cache_read_tokens: 3500,
+      output_tokens: 200,
+      tool_calls: [
+        { name: 'invoke_subagent', args: { TypeName: 'research' } },
+        { name: 'call_mcp_tool', args: { ServerName: 'engram' } },
+        { name: 'write_to_file', args: { TargetFile: 'c:/brain/plan.md' } },
+      ],
+    }),
+  ].join('\n');
+
+  const report = parseTranscript(log, { conversationId: 'c1' });
+  assert.equal(report.activeModel, 'Gemini 3.8 Flash (High)');
+  assert.equal(report.compactionsCount, 1);
+  assert.equal(report.subagentCalls, 1);
+  assert.equal(report.mcpCalls, 1);
+  assert.equal(report.artifactsCount, 1);
+  assert.equal(report.latestContextTokens, 5000);
+  assert.equal(report.contextLoadPercent, '0.5%');
+  assert.equal(report.cacheSavings, '$0.0004');
+});
+
 // -----------------------------------------------------------------------------
 // 4. Frontend Helper Unit Tests
 // -----------------------------------------------------------------------------
@@ -299,6 +346,7 @@ runTest('getToolCategory classifies tools into proper categories', () => {
   assert.equal(getToolCategory('search_web').id, 'read');
   assert.equal(getToolCategory('invoke_subagent').id, 'agent');
   assert.equal(getToolCategory('send_message').id, 'agent');
+  assert.equal(getToolCategory('call_mcp_tool').id, 'mcp');
   assert.equal(getToolCategory('unknown_custom_tool').id, 'other');
 });
 

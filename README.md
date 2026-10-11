@@ -14,10 +14,23 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
 
 ## Features
 
-* **Live Cost & Cache Hit Analytics**:
+* **Live Cost & Prompt Cache Analytics**:
   - Calculates real-time dollar cost with discounted prompt caching.
+  - Tracks exact dollar savings achieved through Gemini prompt caching ($0.1125 / 1M tokens saved).
   - Mathematically bounded Prompt Cache Hit Rate gauge ($\frac{\text{cached}}{\text{uncached} + \text{cached}} \times 100\%$).
   - Breakdown of fresh prompt tokens, cached prompt hits, and completion tokens.
+* **Antigravity Context Window & Headroom Meter**:
+  - Live tracking of active context window volume against the 1.0M Gemini token limit.
+  - Visual load percentage bar with amber warning ($\ge 70\%$) and red danger ($\ge 85\%$) thresholds.
+  - Automatic detection and tracking of Antigravity context compaction events (`<CONTEXT_SUMMARY>`).
+* **Active Model & Ecosystem Telemetry**:
+  - Real-time model detection badge in the side pane header (e.g. `Gemini 3.8 Flash (High)`, `Gemini 1.5 Pro`).
+  - Multi-agent delegation metrics tracking subagents spawned and messages dispatched.
+  - First-class MCP tool classification (`call_mcp_tool`, `list_resources`) distinguishing extension tools from core operations.
+  - Artifact tracking tallying generated plans, walkthroughs, and workspace deliverables.
+* **Agent Velocity & Tool Health**:
+  - Step turnaround latency meter computing average step duration (`Avg 2.1s/step`).
+  - Tool reliability percentage tracking successful tool executions versus errors (`98.5% ok`).
 * **Vertical Waterfall Trace Timeline & Deep Inspector**:
   - Full-height continuous execution rail with duration tags (`+1.2s`) and status indicators.
   - Expandable detail drawers showing structured tool arguments, exact command lines, and target files.
@@ -32,7 +45,7 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
 * **Loop & Stall Radar**:
   - Sliding-window signature detector that flags repetitive tool calls ($\ge 3$ consecutive executions with identical arguments).
 * **Categorical Tool Spectrum**:
-  - Segmented distribution bar grouping calls into File Edits, Shell/Terminal, Search/Read, and Subagents.
+  - Segmented distribution bar grouping calls into File Edits, Shell/Terminal, Search/Read, Subagents, and MCP Tools.
 * **Seamless Multi-Chat Auto Tracking**:
   - Automatically queries Antigravity's `conversation_summaries.db` with graceful fallback to brain directory scans across all Node.js 20+ runtimes.
   - **Auto** mode dynamically follows whichever conversation was modified most recently.

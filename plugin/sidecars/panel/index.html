@@ -20,6 +20,7 @@
         </h1>
       </div>
       <div class="header-right">
+        <span id="model-badge" class="model-badge mono" title="Active Model">Gemini</span>
         <select id="session-select" class="session-dropdown" title="Select conversation to observe" aria-label="Select conversation to observe">
           <option value="auto">Auto (Active Chat)</option>
         </select>
@@ -89,7 +90,7 @@
 
       <!-- KPI Metric Tiles Grid -->
       <section class="grid" aria-label="Session key metrics">
-        <!-- Cost & Cache Tile -->
+        <!-- 1. Cost & Cache Savings Tile -->
         <div class="tile">
           <div class="tile-top">
             <span class="tile-label">Est. Cost</span>
@@ -100,14 +101,36 @@
           </div>
           <div id="val-cost" class="tile-value mono tabular">$0.0000</div>
           <div class="tile-footer">
-            <span id="val-cache-rate" class="tabular">0% cache hit</span>
-            <div class="micro-bar" style="width: 48px;">
+            <span id="val-cache-rate" class="tabular">Saved $0.0000 (0%)</span>
+            <div class="micro-bar" style="width: 44px;" title="Prompt cache hit rate">
               <div id="bar-cache-fill" class="micro-bar-fill cache" style="width: 0%;"></div>
             </div>
           </div>
         </div>
 
-        <!-- Token Volume Tile -->
+        <!-- 2. Active Context Window Tile (Antigravity-specific) -->
+        <div class="tile">
+          <div class="tile-top">
+            <span class="tile-label">Context Window</span>
+            <svg class="icon" aria-hidden="true" style="color: var(--muted-foreground);" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <path d="M3 9h18"/>
+              <path d="M9 21V9"/>
+            </svg>
+          </div>
+          <div class="tile-value mono tabular">
+            <span id="val-context">0k</span>
+            <span style="font-size: 11px; font-weight: normal; color: var(--muted-foreground);">/ 1.0M</span>
+          </div>
+          <div class="tile-footer">
+            <span id="val-context-load" class="tabular">0.0% load</span>
+            <div class="micro-bar" style="width: 44px;" title="Active context window load">
+              <div id="bar-context-fill" class="micro-bar-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Token Volume Tile -->
         <div class="tile">
           <div class="tile-top">
             <span class="tile-label">Tokens</span>
@@ -123,10 +146,10 @@
           </div>
         </div>
 
-        <!-- Total Steps Tile -->
+        <!-- 4. Total Steps & Latency Tile -->
         <div class="tile">
           <div class="tile-top">
-            <span class="tile-label">Steps</span>
+            <span class="tile-label">Steps & Velocity</span>
             <svg class="icon" aria-hidden="true" style="color: var(--muted-foreground);" viewBox="0 0 24 24">
               <polygon points="12 2 2 7 12 12 22 7 12 2"/>
               <polyline points="2 17 12 22 22 17"/>
@@ -135,21 +158,37 @@
           </div>
           <div id="val-steps" class="tile-value mono tabular">0</div>
           <div class="tile-footer">
-            <span id="val-steps-sub" class="tabular">0 errors</span>
+            <span id="val-steps-sub" class="tabular">Avg 0.0s/step · 0 err</span>
           </div>
         </div>
 
-        <!-- Tool Execution Tile -->
+        <!-- 5. Tool Execution & Reliability Tile -->
         <div class="tile">
           <div class="tile-top">
-            <span class="tile-label">Tools</span>
+            <span class="tile-label">Tools & Health</span>
             <svg class="icon" aria-hidden="true" style="color: var(--muted-foreground);" viewBox="0 0 24 24">
               <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
             </svg>
           </div>
           <div id="val-tools-count" class="tile-value mono tabular">0</div>
           <div class="tile-footer">
-            <span id="val-tools-distinct" class="tabular">0 unique</span>
+            <span id="val-tools-distinct" class="tabular">100% ok · 0 unique</span>
+          </div>
+        </div>
+
+        <!-- 6. Antigravity Ecosystem Tile -->
+        <div class="tile">
+          <div class="tile-top">
+            <span class="tile-label">Ecosystem</span>
+            <svg class="icon" aria-hidden="true" style="color: var(--muted-foreground);" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+          </div>
+          <div id="val-ecosystem" class="tile-value mono tabular" style="font-size: 13.5px;">0 Agents · 0 MCP</div>
+          <div class="tile-footer">
+            <span id="val-ecosystem-sub" class="tabular">0 Artifacts · 0 Compacted</span>
           </div>
         </div>
       </section>

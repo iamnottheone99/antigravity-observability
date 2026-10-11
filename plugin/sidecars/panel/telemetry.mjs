@@ -38,6 +38,20 @@ export function calculateCost(inputTokens = 0, cacheTokens = 0, outputTokens = 0
 }
 
 /**
+ * Calculates estimated dollar savings achieved through Gemini prompt caching.
+ * Uncached baseline ($0.15/1M) vs Cached ($0.0375/1M) saves $0.1125/1M tokens.
+ *
+ * @param {number} cacheTokens
+ * @returns {string} e.g. "$0.0125"
+ */
+export function calculateCacheSavings(cacheTokens = 0) {
+  const tokens = Number(cacheTokens) || 0;
+  if (tokens <= 0) return '$0.0000';
+  const savings = tokens * 0.0000001125;
+  return `$${savings.toFixed(4)}`;
+}
+
+/**
  * Detects repetitive tool loops by tracking strictly consecutive identical tool executions.
  *
  * @param {Array<{name: string, signature: string}>} recentToolCalls
@@ -169,6 +183,13 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
   let totalInputTokens = 0;
   let totalCacheTokens = 0;
   let totalOutputTokens = 0;
+  let latestContextTokens = 0;
+  let peakContextTokens = 0;
+  let compactionsCount = 0;
+  let activeModel = 'Gemini';
+  let subagentCalls = 0;
+  let mcpCalls = 0;
+  let artifactsCount = 0;
   const toolCounts = {};
   const filesTouched = new Set();
   const parsedSteps = [];
@@ -187,9 +208,29 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
   for (let i = 0; i < rawSteps.length; i++) {
     const step = rawSteps[i];
 
+    if (typeof step.content === 'string') {
+      const modelMatch = step.content.match(/Model Selection\` from ((?:(?! to ).)+) to (.+?)\.\s*(?:No need|$|\n|<)/);
+      if (modelMatch && modelMatch[2]) {
+        activeModel = modelMatch[2].trim();
+      }
+      if (step.content.includes('<CONTEXT_SUMMARY>')) {
+        compactionsCount++;
+      }
+    }
+
     if (typeof step.input_tokens === 'number') totalInputTokens += step.input_tokens;
     if (typeof step.cache_read_tokens === 'number') totalCacheTokens += step.cache_read_tokens;
     if (typeof step.output_tokens === 'number') totalOutputTokens += step.output_tokens;
+
+    if (typeof step.input_tokens === 'number' || typeof step.cache_read_tokens === 'number') {
+      const stepContext = (step.input_tokens || 0) + (step.cache_read_tokens || 0);
+      if (stepContext > 0) {
+        latestContextTokens = stepContext;
+        if (stepContext > peakContextTokens) {
+          peakContextTokens = stepContext;
+        }
+      }
+    }
 
     // Check next step for paired tool output if this step called tools
     const nextStep = rawSteps[i + 1];
@@ -238,6 +279,19 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
       for (const tc of step.tool_calls) {
         const name = tc.name || 'unknown_tool';
         toolCounts[name] = (toolCounts[name] || 0) + 1;
+
+        if (['invoke_subagent', 'send_message', 'manage_subagents', 'define_subagent'].includes(name)) {
+          subagentCalls++;
+        }
+        if (['call_mcp_tool', 'list_resources', 'read_resource'].includes(name)) {
+          mcpCalls++;
+        }
+        if (name === 'write_to_file') {
+          const tf = tc.args?.TargetFile;
+          if (tf && (typeof tf === 'string') && (tf.includes('.md') || tf.includes('brain') || tc.args?.ArtifactMetadata)) {
+            artifactsCount++;
+          }
+        }
 
         const target = tc.args?.TargetFile || tc.args?.AbsolutePath;
         if (target && typeof target === 'string') {
@@ -337,8 +391,23 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
 
   const totalPromptTokens = totalInputTokens + totalCacheTokens;
   const cacheHitRate = calculateCacheHitRate(totalCacheTokens, totalPromptTokens);
+  const cacheSavings = calculateCacheSavings(totalCacheTokens);
   const estimatedCost = calculateCost(totalInputTokens, totalCacheTokens, totalOutputTokens);
   const loopDetected = detectRepetitionLoop(recentToolCalls, 3);
+
+  const timedSteps = parsedSteps.filter(s => s.durationSeconds > 0);
+  const avgStepDuration = timedSteps.length > 0
+    ? `${(timedSteps.reduce((sum, s) => sum + s.durationSeconds, 0) / timedSteps.length).toFixed(1)}s`
+    : '0.0s';
+
+  const totalToolCalls = Object.values(toolCounts).reduce((sum, count) => sum + count, 0);
+  const totalToolErrors = failedSteps.length;
+  const toolSuccessRate = totalToolCalls > 0
+    ? `${Math.max(0, Math.min(100, ((totalToolCalls - totalToolErrors) / totalToolCalls) * 100)).toFixed(1)}%`
+    : '100%';
+
+  const contextLimit = 1000000;
+  const contextLoadPercent = `${Math.min(100, Math.max(0, (latestContextTokens / contextLimit) * 100)).toFixed(1)}%`;
 
   return {
     status: 'active',
@@ -354,6 +423,18 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
     totalTokens: totalPromptTokens + totalOutputTokens,
     estimatedCost,
     cacheHitRate,
+    cacheSavings,
+    latestContextTokens,
+    peakContextTokens,
+    contextLimit,
+    contextLoadPercent,
+    compactionsCount,
+    activeModel,
+    avgStepDuration,
+    toolSuccessRate,
+    subagentCalls,
+    mcpCalls,
+    artifactsCount,
     errorCount: failedSteps.length,
     loopDetected,
     toolCounts,
@@ -379,8 +460,11 @@ export function getToolCategory(toolName) {
   if (['view_file', 'read_url_content', 'read_resource', 'search_web'].includes(toolName)) {
     return { id: 'read', label: 'Read / Search', color: '#10b981', cls: 'segment-read' };
   }
-  if (['invoke_subagent', 'send_message', 'manage_subagents'].includes(toolName)) {
+  if (['invoke_subagent', 'send_message', 'manage_subagents', 'define_subagent'].includes(toolName)) {
     return { id: 'agent', label: 'Subagents', color: '#f59e0b', cls: 'segment-agent' };
+  }
+  if (['call_mcp_tool', 'list_resources', 'read_resource'].includes(toolName)) {
+    return { id: 'mcp', label: 'MCP Tools', color: '#ec4899', cls: 'segment-mcp' };
   }
   return { id: 'other', label: 'Other Tools', color: '#64748b', cls: 'segment-other' };
 }

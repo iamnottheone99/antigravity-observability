@@ -1,6 +1,6 @@
 {
   "name": "agent-observability-panel",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "description": "Antigravity sidecar panel backend for observability"
 }

@@ -472,24 +472,51 @@ ${fileLines}
       $('session-badge').className = 'status-badge live';
       $('pulse-indicator').className = 'pulse-indicator live';
 
-      // 1. Cost & Cache Hit Gauge (Overview)
+      // Header Model Badge
+      const modelBadge = $('model-badge');
+      if (modelBadge) {
+        modelBadge.textContent = data.activeModel || 'Gemini';
+        modelBadge.title = `Active Model: ${data.activeModel || 'Gemini'}`;
+      }
+
+      // 1. Cost & Cache Savings (Overview)
       $('val-cost').textContent = data.estimatedCost || '$0.0000';
+      const savingsText = data.cacheSavings || '$0.0000';
       const hitRateText = data.cacheHitRate || '0%';
-      $('val-cache-rate').textContent = `${hitRateText} cache hit`;
+      $('val-cache-rate').textContent = `Saved ${savingsText} (${hitRateText})`;
       const numericRate = parseFloat(hitRateText) || 0;
       $('bar-cache-fill').style.width = `${Math.min(100, numericRate)}%`;
 
-      // 2. Token Breakdown (Overview)
+      // 2. Active Context Window (Overview - Antigravity)
+      const ctxTokens = data.latestContextTokens || 0;
+      const ctxK = formatTokens(ctxTokens);
+      $('val-context').textContent = ctxK;
+      const ctxLoadText = data.contextLoadPercent || '0.0%';
+      const ctxNumeric = parseFloat(ctxLoadText) || 0;
+      $('val-context-load').textContent = `${ctxLoadText} load`;
+      const ctxBar = $('bar-context-fill');
+      if (ctxBar) {
+        ctxBar.style.width = `${Math.min(100, ctxNumeric)}%`;
+        if (ctxNumeric >= 85) {
+          ctxBar.className = 'micro-bar-fill danger';
+        } else if (ctxNumeric >= 70) {
+          ctxBar.className = 'micro-bar-fill warning';
+        } else {
+          ctxBar.className = 'micro-bar-fill';
+        }
+      }
+
+      // 3. Token Breakdown (Overview)
       const inK = formatTokens(data.totalPromptTokens || data.inputTokens);
       const outK = formatTokens(data.outputTokens);
       $('val-tokens').textContent = formatTokens(data.totalTokens);
       $('val-tokens-sub').textContent = `In: ${inK} · Out: ${outK}`;
 
-      // 3. Steps & Error Count (Overview & Badges)
+      // 4. Steps & Velocity (Overview & Badges)
       $('val-steps').textContent = data.totalSteps || 0;
       $('tab-traces-badge').textContent = data.totalSteps || 0;
       const errCount = data.errorCount || 0;
-      $('val-steps-sub').textContent = `${errCount} error step${errCount === 1 ? '' : 's'}`;
+      $('val-steps-sub').textContent = `Avg ${data.avgStepDuration || '0.0s'}/step · ${errCount} err`;
       $('err-count-badge').textContent = errCount;
       const errorTabBtn = $('tab-errors');
       if (errCount > 0) {
@@ -498,13 +525,22 @@ ${fileLines}
         errorTabBtn.classList.remove('has-errors');
       }
 
-      // 4. Tools Count (Overview)
+      // 5. Tools & Reliability (Overview)
       const tools = Object.entries(data.toolCounts || {});
       const totalToolsCalled = tools.reduce((sum, [, count]) => sum + count, 0);
       $('val-tools-count').textContent = totalToolsCalled;
-      $('val-tools-distinct').textContent = `${tools.length} unique`;
+      const successRate = data.toolSuccessRate || '100%';
+      $('val-tools-distinct').textContent = `${successRate} ok · ${tools.length} distinct`;
 
-      // 5. Loop Warning Alert
+      // 6. Antigravity Ecosystem (Overview)
+      const subagentCalls = data.subagentCalls || 0;
+      const mcpCalls = data.mcpCalls || 0;
+      const artifactsCount = data.artifactsCount || 0;
+      const compactionsCount = data.compactionsCount || 0;
+      $('val-ecosystem').textContent = `${subagentCalls} Agents · ${mcpCalls} MCP`;
+      $('val-ecosystem-sub').textContent = `${artifactsCount} Artifacts · ${compactionsCount} Compacted`;
+
+      // 7. Loop Warning Alert
       const loopBanner = $('loop-banner');
       if (data.loopDetected) {
         loopBanner.classList.add('active');
@@ -515,7 +551,7 @@ ${fileLines}
       }
 
       // Telemetry change detection signature
-      const newSignature = `${data.conversationId}:${data.totalSteps}:${data.errorCount}:${data.totalTokens}:${data.loopDetected?.repetitions || 0}:${(data.filesTouched || []).length}`;
+      const newSignature = `${data.conversationId}:${data.totalSteps}:${data.errorCount}:${data.totalTokens}:${data.latestContextTokens || 0}:${data.activeModel || ''}:${data.loopDetected?.repetitions || 0}:${(data.filesTouched || []).length}`;
       if (force || newSignature !== lastTelemetrySignature) {
         lastTelemetrySignature = newSignature;
         renderToolSpectrum(data.toolCounts || {});
