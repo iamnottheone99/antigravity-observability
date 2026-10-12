@@ -90,18 +90,17 @@
 
       <!-- KPI Metric Tiles Grid -->
       <section class="grid" aria-label="Session key metrics">
-        <!-- 1. Cost & Cache Savings Tile -->
+        <!-- 1. Cache Hits Tile -->
         <div class="tile">
           <div class="tile-top">
-            <span class="tile-label">Est. Cost</span>
+            <span class="tile-label">Cache Hits</span>
             <svg class="icon" aria-hidden="true" style="color: var(--muted-foreground);" viewBox="0 0 24 24">
-              <line x1="12" y1="1" x2="12" y2="23"/>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
             </svg>
           </div>
-          <div id="val-cost" class="tile-value mono tabular">$0.0000</div>
+          <div id="val-cache-rate" class="tile-value mono tabular">0%</div>
           <div class="tile-footer">
-            <span id="val-cache-rate" class="tabular">Saved $0.0000 (0%)</span>
+            <span id="val-cache-sub" class="tabular">0 cached</span>
             <div class="micro-bar" style="width: 44px;" title="Prompt cache hit rate">
               <div id="bar-cache-fill" class="micro-bar-fill cache" style="width: 0%;"></div>
             </div>

@@ -479,13 +479,24 @@ ${fileLines}
         modelBadge.title = `Active Model: ${data.activeModel || 'Gemini'}`;
       }
 
-      // 1. Cost & Cache Savings (Overview)
-      $('val-cost').textContent = data.estimatedCost || '$0.0000';
-      const savingsText = data.cacheSavings || '$0.0000';
+      // 1. Cache Hits (Overview)
       const hitRateText = data.cacheHitRate || '0%';
-      $('val-cache-rate').textContent = `Saved ${savingsText} (${hitRateText})`;
+      const cachedK = formatTokens(data.cacheReadTokens || 0);
+      const savingsText = data.cacheSavings || '$0.0000';
+      if ($('val-cache-rate')) {
+        $('val-cache-rate').textContent = hitRateText;
+      }
+      if ($('val-cache-sub')) {
+        $('val-cache-sub').textContent = `${cachedK} cached`;
+        $('val-cache-sub').title = `${data.cacheReadTokens || 0} tokens from prompt cache · Saved ${savingsText} vs uncached`;
+      }
+      if ($('val-cost')) {
+        $('val-cost').textContent = data.estimatedCost || '$0.0000';
+      }
       const numericRate = parseFloat(hitRateText) || 0;
-      $('bar-cache-fill').style.width = `${Math.min(100, numericRate)}%`;
+      if ($('bar-cache-fill')) {
+        $('bar-cache-fill').style.width = `${Math.min(100, numericRate)}%`;
+      }
 
       // 2. Active Context Window (Overview - Antigravity)
       const ctxTokens = data.latestContextTokens || 0;
