@@ -15,7 +15,7 @@ Returns runtime metadata and health diagnostics.
 ```json
 {
   "status": "ok",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "node": "v22.5.0",
   "platform": "win32 10.0.26100",
   "uptimeSeconds": 142,
@@ -27,7 +27,7 @@ Returns runtime metadata and health diagnostics.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `status` | `string` | Always `"ok"` when running. |
-| `version` | `string` | Sidecar semantic version (e.g. `"1.2.0"`). |
+| `version` | `string` | Sidecar semantic version (e.g. `"1.2.1"`). |
 | `node` | `string` | Node.js runtime version. |
 | `platform` | `string` | Host operating system and kernel release. |
 | `uptimeSeconds` | `number` | Seconds elapsed since sidecar process boot. |
@@ -66,6 +66,7 @@ Fetches real-time token metrics, latency, step history, and error logs for a ses
 | Parameter | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
 | `conversationId` | `string` | No | Target UUID, or `"auto"` (default). In auto mode, dynamically follows the most recently active session. |
+| `force` | `boolean` | No | When `"true"`, forces bypass of session TTL and transcript caching for a clean disk reload. |
 
 #### Response Example:
 ```json

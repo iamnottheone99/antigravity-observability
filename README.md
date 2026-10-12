@@ -14,9 +14,9 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
 
 ## Features
 
-* **Live Cost & Prompt Cache Analytics**:
-  - Calculates real-time dollar cost with discounted prompt caching.
-  - Tracks exact dollar savings achieved through Gemini prompt caching ($0.1125 / 1M tokens saved).
+* **Prompt Cache Analytics & Cache Hits**:
+  - Dedicated **Cache Hits** overview tile highlighting prompt cache hit percentage as the primary KPI.
+  - Displays cached token volume with hover tooltips detailing prompt cache dollar savings ($0.1125 / 1M tokens saved).
   - Mathematically bounded Prompt Cache Hit Rate gauge ($\frac{\text{cached}}{\text{uncached} + \text{cached}} \times 100\%$).
   - Breakdown of fresh prompt tokens, cached prompt hits, and completion tokens.
 * **Antigravity Context Window & Headroom Meter**:
@@ -49,8 +49,9 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
 * **Seamless Multi-Chat Auto Tracking**:
   - Automatically queries Antigravity's `conversation_summaries.db` with graceful fallback to brain directory scans across all Node.js 20+ runtimes.
   - **Auto** mode dynamically follows whichever conversation was modified most recently.
-* **In-UI Monitoring Toggle**:
+* **In-UI Monitoring Toggle & Manual Refresh**:
   - One-click `[ ON / OFF ]` button to pause and resume live polling without closing or unmounting the extension.
+  - Dedicated **Refresh** button in the top bar to trigger immediate, uncached reload of transcripts and session states.
 
 ---
 

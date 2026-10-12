@@ -42,7 +42,7 @@ console.log('📦 Manifest & Structure Checks:');
 runTest('plugin.json is valid and contains expected metadata', () => {
   const data = JSON.parse(readFileSync(join(PLUGIN, 'plugin.json'), 'utf8'));
   assert.equal(data.name, 'agent-observability');
-  assert.equal(data.version, '1.2.0');
+  assert.equal(data.version, '1.2.1');
   assert.ok(data.description && data.description.length > 0);
   assert.equal(data.logo, 'assets/logo.svg');
 });
@@ -59,13 +59,13 @@ runTest('sidecar.json defines auxiliary pane entrypoint', () => {
 runTest('sidecars package.json defines ES module and matches version', () => {
   const data = JSON.parse(readFileSync(join(PLUGIN, 'sidecars/panel/package.json'), 'utf8'));
   assert.equal(data.type, 'module');
-  assert.equal(data.version, '1.2.0');
+  assert.equal(data.version, '1.2.1');
 });
 
 runTest('root package.json is valid and declares engines', () => {
   const data = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   assert.equal(data.name, 'antigravity-observability');
-  assert.equal(data.version, '1.2.0');
+  assert.equal(data.version, '1.2.1');
   assert.equal(data.type, 'module');
   assert.ok(data.engines?.node, 'Missing engines.node definition');
 });
@@ -77,6 +77,8 @@ runTest('HTML layout contains all 4 tabs, CSP, and ARIA roles', () => {
   assert.ok(html.includes('id="pane-files"'), 'Missing pane-files');
   assert.ok(html.includes('id="pane-steer"'), 'Missing pane-steer');
   assert.ok(html.includes('id="btn-toggle-monitor"'), 'Missing power toggle');
+  assert.ok(html.includes('id="btn-refresh"'), 'Missing refresh button');
+  assert.ok(html.includes('id="val-cache-rate"'), 'Missing Cache Hits tile value');
   assert.ok(html.includes('id="btn-copy-report"'), 'Missing copy report button');
   assert.ok(html.includes('Content-Security-Policy'), 'Missing Content-Security-Policy meta tag');
   assert.ok(html.includes('role="tablist"'), 'Missing role="tablist"');

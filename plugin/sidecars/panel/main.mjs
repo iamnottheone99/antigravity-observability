@@ -37,7 +37,7 @@ app.api('/styles.css', () => new Response(readLocal('styles.css'), { contentType
 // System status
 app.api('/api/status', () => ({
   status: 'ok',
-  version: '1.2.0',
+  version: '1.2.1',
   node: process.version,
   platform: `${platform()} ${release()}`,
   uptimeSeconds: Math.round((Date.now() - STARTED_AT) / 1000),
@@ -169,7 +169,8 @@ app.api('/api/sessions', () => {
 // Telemetry parsing endpoint with file mtime/size caching
 app.api('/api/telemetry', (params) => {
   let conversationId = params?.conversationId;
-  const recentSessions = getRecentSessions();
+  const isForced = params?.force === 'true' || params?.force === true;
+  const recentSessions = getRecentSessions(isForced);
 
   // Auto-resolve: if conversationId is 'auto' or omitted, dynamically target the latest active chat
   let isAuto = false;
@@ -247,15 +248,19 @@ app.api('/api/telemetry', (params) => {
     return { error: `Failed to stat transcript: ${err.message}`, status: 'read_error' };
   }
 
-  // Check stat cache: avoid re-reading and re-parsing unchanged transcripts
-  const cached = transcriptCache.get(conversationId);
-  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
-    return {
-      ...cached.report,
-      activeTitle,
-      isAuto,
-      sessions: recentSessions,
-    };
+  // Check stat cache: avoid re-reading and re-parsing unchanged transcripts unless forced
+  if (isForced) {
+    transcriptCache.delete(conversationId);
+  } else {
+    const cached = transcriptCache.get(conversationId);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      return {
+        ...cached.report,
+        activeTitle,
+        isAuto,
+        sessions: recentSessions,
+      };
+    }
   }
 
   let raw = '';

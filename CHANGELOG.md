@@ -2,6 +2,15 @@
 
 All notable changes to the Antigravity Observability Companion will be documented in this file.
 
+## [1.2.1] - 2026-10-12
+
+### Added
+- **Dedicated Cache Hits Overview Tile**: Replaced the theoretical Est. Cost overview card with a focused Cache Hits tile showcasing prompt cache hit percentage as the primary KPI, accompanied by cached token counts and savings tooltips.
+- **Manual Telemetry Refresh Button**: Added a compact, animated refresh button in the header bar allowing immediate, uncached reload of active conversation transcripts and session listings.
+
+### Changed
+- **Sidecar Caching Bypass**: The `/api/telemetry` endpoint now supports a `force=true` query parameter to invalidate in-memory transcript and session caches on demand.
+
 ## [1.2.0] - 2026-10-11
 
 ### Added

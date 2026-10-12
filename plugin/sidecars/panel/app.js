@@ -450,7 +450,8 @@ ${fileLines}
     const targetId = selectedConversationId === 'auto' ? 'auto' : selectedConversationId;
 
     try {
-      const res = await sidecar.fetch(`/api/telemetry?conversationId=${encodeURIComponent(targetId)}`);
+      const forceQuery = force ? '&force=true' : '';
+      const res = await sidecar.fetch(`/api/telemetry?conversationId=${encodeURIComponent(targetId)}${forceQuery}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
@@ -752,6 +753,22 @@ ${fileLines}
       selectedConversationId = e.target.value;
       refreshTelemetry(true);
     });
+
+    // Manual telemetry refresh button
+    const refreshBtn = $('btn-refresh');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', async () => {
+        refreshBtn.classList.add('spinning');
+        try {
+          await refreshTelemetry(true);
+          showToast('Telemetry refreshed');
+        } catch {
+          showToast('Refresh failed');
+        } finally {
+          setTimeout(() => refreshBtn.classList.remove('spinning'), 500);
+        }
+      });
+    }
 
     // Power On/Off monitoring toggle
     $('btn-toggle-monitor').addEventListener('click', toggleMonitoring);
