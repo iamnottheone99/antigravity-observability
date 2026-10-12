@@ -7,6 +7,8 @@ All notable changes to the Antigravity Observability Companion will be documente
 ### Added
 - **Dedicated Cache Hits Overview Tile**: Replaced the theoretical Est. Cost overview card with a focused Cache Hits tile showcasing prompt cache hit percentage as the primary KPI, accompanied by cached token counts and savings tooltips.
 - **Manual Telemetry Refresh Button**: Added a compact, animated refresh button in the header bar allowing immediate, uncached reload of active conversation transcripts and session listings.
+- **Granular MCP Server & Ecosystem Breakdown**: The Ecosystem tile now breaks down specific MCP server counts (e.g., `Engram (4), zvec-grep (1)`) and active skills with structured hover diagnostics.
+- **MCP Server Spectrum Segments & Active Skills Tags**: The Tool Spectrum splits MCP tool calls by individual server with dedicated colors and percentages, and renders an Active Skills tag list for detected skill and MCP activations.
 
 ### Changed
 - **Sidecar Caching Bypass**: The `/api/telemetry` endpoint now supports a `force=true` query parameter to invalidate in-memory transcript and session caches on demand.

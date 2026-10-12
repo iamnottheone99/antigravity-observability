@@ -95,6 +95,14 @@ Fetches real-time token metrics, latency, step history, and error logs for a ses
   "toolSuccessRate": "98.5%",
   "subagentCalls": 1,
   "mcpCalls": 4,
+  "mcpServers": {
+    "engram": 3,
+    "zvec_grep": 1
+  },
+  "activeSkills": [
+    "engram",
+    "zvec-grep"
+  ],
   "artifactsCount": 2,
   "errorCount": 0,
   "loopDetected": null,

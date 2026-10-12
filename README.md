@@ -25,8 +25,9 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
   - Automatic detection and tracking of Antigravity context compaction events (`<CONTEXT_SUMMARY>`).
 * **Active Model & Ecosystem Telemetry**:
   - Real-time model detection badge in the side pane header (e.g. `Gemini 3.8 Flash (High)`, `Gemini 1.5 Pro`).
+  - Granular MCP server breakdown tracking invocations across individual servers (e.g. Engram, zvec-grep, Chrome DevTools).
   - Multi-agent delegation metrics tracking subagents spawned and messages dispatched.
-  - First-class MCP tool classification (`call_mcp_tool`, `list_resources`) distinguishing extension tools from core operations.
+  - Active Skills detection mapping `SKILL.md` ingestions and skill CLI executions.
   - Artifact tracking tallying generated plans, walkthroughs, and workspace deliverables.
 * **Agent Velocity & Tool Health**:
   - Step turnaround latency meter computing average step duration (`Avg 2.1s/step`).
@@ -44,8 +45,9 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
   - One-click **Copy Markdown Report** for sharing session traces in PRs or issues.
 * **Loop & Stall Radar**:
   - Sliding-window signature detector that flags repetitive tool calls ($\ge 3$ consecutive executions with identical arguments).
-* **Categorical Tool Spectrum**:
-  - Segmented distribution bar grouping calls into File Edits, Shell/Terminal, Search/Read, Subagents, and MCP Tools.
+* **Categorical Tool Spectrum & Skills Tagging**:
+  - Segmented distribution bar grouping calls into File Edits, Shell/Terminal, Search/Read, Subagents, and per-server MCP segments.
+  - Active Skills tag row displaying live skill and MCP activations (e.g., `graphify`, `archify`, `engram`).
 * **Seamless Multi-Chat Auto Tracking**:
   - Automatically queries Antigravity's `conversation_summaries.db` with graceful fallback to brain directory scans across all Node.js 20+ runtimes.
   - **Auto** mode dynamically follows whichever conversation was modified most recently.

@@ -79,6 +79,7 @@ runTest('HTML layout contains all 4 tabs, CSP, and ARIA roles', () => {
   assert.ok(html.includes('id="btn-toggle-monitor"'), 'Missing power toggle');
   assert.ok(html.includes('id="btn-refresh"'), 'Missing refresh button');
   assert.ok(html.includes('id="val-cache-rate"'), 'Missing Cache Hits tile value');
+  assert.ok(html.includes('id="spectrum-skills"'), 'Missing spectrum-skills container');
   assert.ok(html.includes('id="btn-copy-report"'), 'Missing copy report button');
   assert.ok(html.includes('Content-Security-Policy'), 'Missing Content-Security-Policy meta tag');
   assert.ok(html.includes('role="tablist"'), 'Missing role="tablist"');
@@ -319,6 +320,7 @@ runTest('parseTranscript detects model settings changes, compactions, and subage
       tool_calls: [
         { name: 'invoke_subagent', args: { TypeName: 'research' } },
         { name: 'call_mcp_tool', args: { ServerName: 'engram' } },
+        { name: 'view_file', args: { AbsolutePath: 'c:/Users/test/.gemini/config/skills/graphify/SKILL.md' } },
         { name: 'write_to_file', args: { TargetFile: 'c:/brain/plan.md' } },
       ],
     }),
@@ -329,6 +331,9 @@ runTest('parseTranscript detects model settings changes, compactions, and subage
   assert.equal(report.compactionsCount, 1);
   assert.equal(report.subagentCalls, 1);
   assert.equal(report.mcpCalls, 1);
+  assert.deepEqual(report.mcpServers, { engram: 1 });
+  assert.ok(report.activeSkills.includes('engram'));
+  assert.ok(report.activeSkills.includes('graphify'));
   assert.equal(report.artifactsCount, 1);
   assert.equal(report.latestContextTokens, 5000);
   assert.equal(report.contextLoadPercent, '0.5%');

@@ -190,6 +190,8 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
   let subagentCalls = 0;
   let mcpCalls = 0;
   let artifactsCount = 0;
+  const mcpServers = {};
+  const activeSkills = new Set();
   const toolCounts = {};
   const filesTouched = new Set();
   const parsedSteps = [];
@@ -280,12 +282,55 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
         const name = tc.name || 'unknown_tool';
         toolCounts[name] = (toolCounts[name] || 0) + 1;
 
+        let mcpServer = null;
+        if (name === 'call_mcp_tool') {
+          mcpServer = tc.args?.ServerName ? cleanArgValue(tc.args.ServerName) : 'mcp';
+          mcpCalls++;
+          mcpServers[mcpServer] = (mcpServers[mcpServer] || 0) + 1;
+          activeSkills.add(mcpServer.toLowerCase());
+        } else if (name.startsWith('mcp_')) {
+          const parts = name.split('_');
+          mcpServer = parts[1] || 'mcp';
+          mcpCalls++;
+          mcpServers[mcpServer] = (mcpServers[mcpServer] || 0) + 1;
+          activeSkills.add(mcpServer.toLowerCase());
+        } else if (name === 'list_resources' || name === 'read_resource') {
+          mcpServer = tc.args?.ServerName ? cleanArgValue(tc.args.ServerName) : 'mcp';
+          mcpCalls++;
+          mcpServers[mcpServer] = (mcpServers[mcpServer] || 0) + 1;
+          activeSkills.add(mcpServer.toLowerCase());
+        }
+
         if (['invoke_subagent', 'send_message', 'manage_subagents', 'define_subagent'].includes(name)) {
           subagentCalls++;
         }
-        if (['call_mcp_tool', 'list_resources', 'read_resource'].includes(name)) {
-          mcpCalls++;
+
+        if (name === 'view_file') {
+          const path = tc.args?.AbsolutePath || tc.args?.TargetFile || '';
+          const m = String(path).match(/[/\\]skills[/\\]([^/\\]+)[/\\]SKILL\.md/i);
+          if (m && m[1]) {
+            activeSkills.add(m[1].toLowerCase());
+          }
+        } else if (name === 'run_command') {
+          const cmd = String(tc.args?.CommandLine || '').trim();
+          const firstWord = cmd.split(/\s+/)[0]?.replace(/^.*[/\\]/, '').toLowerCase();
+          const knownSkillCommands = {
+            'graphify': 'graphify',
+            'archify': 'archify',
+            'zg': 'zvec-grep',
+            'zvec-grep': 'zvec-grep',
+            'gh-axi': 'gh-axi',
+            'docker-axi': 'docker-axi',
+            'npm-axi': 'npm-axi',
+            'chrome-devtools-axi': 'chrome-devtools-axi',
+            'lavish': 'lavish',
+            'lavish-axi': 'lavish-axi',
+          };
+          if (knownSkillCommands[firstWord]) {
+            activeSkills.add(knownSkillCommands[firstWord]);
+          }
         }
+
         if (name === 'write_to_file') {
           const tf = tc.args?.TargetFile;
           if (tf && (typeof tf === 'string') && (tf.includes('.md') || tf.includes('brain') || tc.args?.ArtifactMetadata)) {
@@ -328,7 +373,8 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
           summary: toolSummary,
           action: toolAction,
           primaryArg,
-          category: getToolCategory(name).id,
+          category: getToolCategory(name, mcpServer).id,
+          mcpServer,
           args: sanitizedArgs,
           output: outputSnippet,
         });
@@ -434,6 +480,8 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
     toolSuccessRate,
     subagentCalls,
     mcpCalls,
+    mcpServers,
+    activeSkills: Array.from(activeSkills),
     artifactsCount,
     errorCount: failedSteps.length,
     loopDetected,
@@ -448,22 +496,40 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
  * Classifies tool calls into semantic UI categories.
  *
  * @param {string} toolName
- * @returns {{ id: string, label: string, color: string, cls: string }}
+ * @param {string} [serverName]
+ * @returns {{ id: string, label: string, color: string, cls: string, server?: string }}
  */
-export function getToolCategory(toolName) {
+export function getToolCategory(toolName, serverName = null) {
   if (['replace_file_content', 'write_to_file'].includes(toolName)) {
     return { id: 'file', label: 'File Edits', color: '#3b82f6', cls: 'segment-file' };
   }
   if (['run_command'].includes(toolName)) {
     return { id: 'shell', label: 'Shell / Terminal', color: '#8b5cf6', cls: 'segment-shell' };
   }
-  if (['view_file', 'read_url_content', 'read_resource', 'search_web'].includes(toolName)) {
+  if (['view_file', 'read_url_content', 'search_web'].includes(toolName)) {
     return { id: 'read', label: 'Read / Search', color: '#10b981', cls: 'segment-read' };
   }
   if (['invoke_subagent', 'send_message', 'manage_subagents', 'define_subagent'].includes(toolName)) {
     return { id: 'agent', label: 'Subagents', color: '#f59e0b', cls: 'segment-agent' };
   }
-  if (['call_mcp_tool', 'list_resources', 'read_resource'].includes(toolName)) {
+  if (['call_mcp_tool', 'list_resources', 'read_resource'].includes(toolName) || (typeof toolName === 'string' && toolName.startsWith('mcp_'))) {
+    if (serverName) {
+      const s = String(serverName).toLowerCase();
+      let color = '#ec4899';
+      if (s === 'engram') color = '#ec4899';
+      else if (s.includes('zvec')) color = '#06b6d4';
+      else if (s.includes('chrome') || s.includes('devtools')) color = '#f97316';
+      else if (s.includes('git') || s.includes('gh')) color = '#a855f7';
+      else if (s.includes('docker')) color = '#38bdf8';
+      else {
+        const palette = ['#f43f5e', '#8b5cf6', '#14b8a6', '#0ea5e9', '#eab308'];
+        let hash = 0;
+        for (let i = 0; i < s.length; i++) hash = (hash << 5) - hash + s.charCodeAt(i);
+        color = palette[Math.abs(hash) % palette.length];
+      }
+      const cleanLabel = serverName.charAt(0).toUpperCase() + serverName.slice(1);
+      return { id: `mcp-${s}`, label: `${cleanLabel} (MCP)`, color, cls: 'segment-mcp', server: s };
+    }
     return { id: 'mcp', label: 'MCP Tools', color: '#ec4899', cls: 'segment-mcp' };
   }
   return { id: 'other', label: 'Other Tools', color: '#64748b', cls: 'segment-other' };

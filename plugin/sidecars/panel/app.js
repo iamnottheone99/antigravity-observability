@@ -43,18 +43,38 @@
   }
 
   // Tool classification for the segmented spectrum
-  function getToolCategory(toolName) {
+  function getToolCategory(toolName, serverName = null) {
     if (['replace_file_content', 'write_to_file'].includes(toolName)) {
       return { id: 'file', label: 'File Edits', color: '#3b82f6', cls: 'segment-file' };
     }
     if (['run_command'].includes(toolName)) {
       return { id: 'shell', label: 'Shell / Terminal', color: '#8b5cf6', cls: 'segment-shell' };
     }
-    if (['view_file', 'read_url_content', 'read_resource', 'search_web'].includes(toolName)) {
+    if (['view_file', 'read_url_content', 'search_web'].includes(toolName)) {
       return { id: 'read', label: 'Read / Search', color: '#10b981', cls: 'segment-read' };
     }
-    if (['invoke_subagent', 'send_message', 'manage_subagents'].includes(toolName)) {
+    if (['invoke_subagent', 'send_message', 'manage_subagents', 'define_subagent'].includes(toolName)) {
       return { id: 'agent', label: 'Subagents', color: '#f59e0b', cls: 'segment-agent' };
+    }
+    if (['call_mcp_tool', 'list_resources', 'read_resource'].includes(toolName) || (typeof toolName === 'string' && toolName.startsWith('mcp_'))) {
+      if (serverName) {
+        const s = String(serverName).toLowerCase();
+        let color = '#ec4899';
+        if (s === 'engram') color = '#ec4899';
+        else if (s.includes('zvec')) color = '#06b6d4';
+        else if (s.includes('chrome') || s.includes('devtools')) color = '#f97316';
+        else if (s.includes('git') || s.includes('gh')) color = '#a855f7';
+        else if (s.includes('docker')) color = '#38bdf8';
+        else {
+          const palette = ['#f43f5e', '#8b5cf6', '#14b8a6', '#0ea5e9', '#eab308'];
+          let hash = 0;
+          for (let i = 0; i < s.length; i++) hash = (hash << 5) - hash + s.charCodeAt(i);
+          color = palette[Math.abs(hash) % palette.length];
+        }
+        const cleanLabel = serverName.charAt(0).toUpperCase() + serverName.slice(1);
+        return { id: `mcp-${s}`, label: `${cleanLabel} (MCP)`, color, cls: 'segment-mcp', server: s };
+      }
+      return { id: 'mcp', label: 'MCP Tools', color: '#ec4899', cls: 'segment-mcp' };
     }
     return { id: 'other', label: 'Other Tools', color: '#64748b', cls: 'segment-other' };
   }
@@ -86,10 +106,11 @@
     }
   }
 
-  function renderToolSpectrum(toolCounts = {}) {
+  function renderToolSpectrum(toolCounts = {}, mcpServers = {}, activeSkills = []) {
     const barEl = $('spectrum-bar');
     const legendEl = $('spectrum-legend');
     const totalEl = $('spectrum-total');
+    const skillsEl = $('spectrum-skills');
 
     const entries = Object.entries(toolCounts);
     const totalCalls = entries.reduce((sum, [, count]) => sum + count, 0);
@@ -98,11 +119,17 @@
     if (totalCalls === 0) {
       barEl.innerHTML = '<div style="width: 100%; height: 100%; background: var(--secondary);"></div>';
       legendEl.innerHTML = '<span style="color: var(--muted-foreground); font-size: 10px;">No tools recorded yet</span>';
+      if (skillsEl) skillsEl.style.display = 'none';
       return;
     }
 
     const categories = {};
+    const serverEntries = Object.entries(mcpServers || {});
+
     for (const [name, count] of entries) {
+      if ((name === 'call_mcp_tool' || name.startsWith('mcp_') || name === 'list_resources' || name === 'read_resource') && serverEntries.length > 0) {
+        continue;
+      }
       const cat = getToolCategory(name);
       if (!categories[cat.id]) {
         categories[cat.id] = { ...cat, count: 0, tools: [] };
@@ -111,9 +138,26 @@
       categories[cat.id].tools.push({ name, count });
     }
 
+    if (serverEntries.length > 0) {
+      for (const [server, count] of serverEntries) {
+        const cat = getToolCategory('call_mcp_tool', server);
+        if (!categories[cat.id]) {
+          categories[cat.id] = { ...cat, count: 0, tools: [] };
+        }
+        categories[cat.id].count += count;
+        categories[cat.id].tools.push({ name: `${server} (MCP)`, count });
+      }
+    } else {
+      const mcpTotal = (toolCounts['call_mcp_tool'] || 0) + (toolCounts['list_resources'] || 0) + (toolCounts['read_resource'] || 0);
+      if (mcpTotal > 0 && !categories['mcp']) {
+        const cat = getToolCategory('call_mcp_tool');
+        categories['mcp'] = { ...cat, count: mcpTotal, tools: [{ name: 'call_mcp_tool', count: mcpTotal }] };
+      }
+    }
+
     const segmentsHtml = Object.values(categories).map(cat => {
       const pct = ((cat.count / totalCalls) * 100).toFixed(1);
-      return `<div class="segment ${cat.cls}" style="width: ${pct}%;" title="${cat.label}: ${cat.count} (${pct}%)"></div>`;
+      return `<div class="segment ${cat.cls}" style="width: ${pct}%; background-color: ${cat.color};" title="${cat.label}: ${cat.count} (${pct}%)"></div>`;
     }).join('');
     barEl.innerHTML = segmentsHtml;
 
@@ -128,6 +172,19 @@
       `;
     }).join('');
     legendEl.innerHTML = legendHtml;
+
+    if (skillsEl) {
+      if (Array.isArray(activeSkills) && activeSkills.length > 0) {
+        skillsEl.style.display = 'flex';
+        skillsEl.innerHTML = `
+          <span class="skills-label">Active Skills / MCP:</span>
+          ${activeSkills.map(s => `<span class="skill-tag">${escapeHtml(s)}</span>`).join('')}
+        `;
+      } else {
+        skillsEl.style.display = 'none';
+        skillsEl.innerHTML = '';
+      }
+    }
   }
 
   // Render vertical waterfall traces preserving expanded node drawer states
@@ -547,10 +604,39 @@ ${fileLines}
       // 6. Antigravity Ecosystem (Overview)
       const subagentCalls = data.subagentCalls || 0;
       const mcpCalls = data.mcpCalls || 0;
+      const mcpServers = data.mcpServers || {};
+      const activeSkills = data.activeSkills || [];
       const artifactsCount = data.artifactsCount || 0;
       const compactionsCount = data.compactionsCount || 0;
-      $('val-ecosystem').textContent = `${subagentCalls} Agents · ${mcpCalls} MCP`;
-      $('val-ecosystem-sub').textContent = `${artifactsCount} Artifacts · ${compactionsCount} Compacted`;
+
+      const serverEntries = Object.entries(mcpServers);
+      let mcpSummary = `${mcpCalls} MCP`;
+      if (serverEntries.length > 0) {
+        mcpSummary = serverEntries
+          .sort((a, b) => b[1] - a[1])
+          .map(([srv, cnt]) => `${srv}(${cnt})`)
+          .join(', ');
+      }
+
+      if (subagentCalls > 0) {
+        $('val-ecosystem').textContent = `${subagentCalls} Ag · ${mcpSummary}`;
+      } else {
+        $('val-ecosystem').textContent = mcpCalls > 0 ? mcpSummary : '0 Agents · 0 MCP';
+      }
+
+      if (activeSkills.length > 0) {
+        const skillLabel = activeSkills.length <= 2 ? activeSkills.join(', ') : `${activeSkills.length} Skills`;
+        $('val-ecosystem-sub').textContent = `${skillLabel} · ${artifactsCount} Art · ${compactionsCount} Cmp`;
+      } else {
+        $('val-ecosystem-sub').textContent = `${artifactsCount} Artifacts · ${compactionsCount} Compacted`;
+      }
+
+      const ecoTile = $('val-ecosystem')?.parentElement;
+      if (ecoTile) {
+        const srvDetails = serverEntries.length > 0 ? serverEntries.map(([s, c]) => `${s}: ${c}`).join(', ') : 'None';
+        const sklDetails = activeSkills.length > 0 ? activeSkills.join(', ') : 'None';
+        ecoTile.title = `Ecosystem Breakdown:\n• Subagents: ${subagentCalls} calls\n• MCP Servers: ${srvDetails}\n• Active Skills: ${sklDetails}\n• Artifacts: ${artifactsCount}\n• Context Compactions: ${compactionsCount}`;
+      }
 
       // 7. Loop Warning Alert
       const loopBanner = $('loop-banner');
@@ -563,10 +649,10 @@ ${fileLines}
       }
 
       // Telemetry change detection signature
-      const newSignature = `${data.conversationId}:${data.totalSteps}:${data.errorCount}:${data.totalTokens}:${data.latestContextTokens || 0}:${data.activeModel || ''}:${data.loopDetected?.repetitions || 0}:${(data.filesTouched || []).length}`;
+      const newSignature = `${data.conversationId}:${data.totalSteps}:${data.errorCount}:${data.totalTokens}:${data.latestContextTokens || 0}:${data.activeModel || ''}:${data.loopDetected?.repetitions || 0}:${(data.filesTouched || []).length}:${Object.keys(mcpServers).length}:${activeSkills.length}`;
       if (force || newSignature !== lastTelemetrySignature) {
         lastTelemetrySignature = newSignature;
-        renderToolSpectrum(data.toolCounts || {});
+        renderToolSpectrum(data.toolCounts || {}, data.mcpServers || {}, data.activeSkills || []);
         renderWaterfall();
         renderFiles(data.filesTouched || []);
       }
