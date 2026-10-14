@@ -288,6 +288,11 @@ app.api('/api/telemetry', (params) => {
     sessions: recentSessions,
   });
 
+  if (transcriptCache.size >= 50) {
+    const oldestKey = transcriptCache.keys().next().value;
+    transcriptCache.delete(oldestKey);
+  }
+
   transcriptCache.set(conversationId, {
     mtimeMs: stat.mtimeMs,
     size: stat.size,
