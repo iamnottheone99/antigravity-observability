@@ -3,7 +3,11 @@ import { homedir, platform, release } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Response, SidecarApp } from 'sidecar_sdk';
+import { initNeuralEmbeddingEngine } from './classifier.mjs';
 import { parseTranscript } from './telemetry.mjs';
+
+// Non-blocking background bootstrap of local neural embedding engine
+initNeuralEmbeddingEngine().catch(() => {});
 
 // Dynamic import of node:sqlite for backwards compatibility with Node.js < 22.5.0
 let DatabaseSync = null;
@@ -37,7 +41,7 @@ app.api('/styles.css', () => new Response(readLocal('styles.css'), { contentType
 // System status
 app.api('/api/status', () => ({
   status: 'ok',
-  version: '1.2.1',
+  version: '1.3.0',
   node: process.version,
   platform: `${platform()} ${release()}`,
   uptimeSeconds: Math.round((Date.now() - STARTED_AT) / 1000),
@@ -234,6 +238,13 @@ app.api('/api/telemetry', (params) => {
       artifactsCount: 0,
       errorCount: 0,
       loopDetected: null,
+      semanticLoop: null,
+      currentPhase: 'SYNTHESIS',
+      currentPhaseLabel: 'Synthesis',
+      currentPhaseColor: '#8b5cf6',
+      phaseCounts: { EXPLORATION: 0, SYNTHESIS: 0, EXECUTION: 0, VERIFICATION: 0, RECOVERY: 0 },
+      phaseDistribution: { exploration: 0, synthesis: 100, execution: 0, verification: 0, recovery: 0 },
+      cognitiveEngine: { engine: 'statistical-fallback', model: 'none', dimensions: 0, active: false, cachedVectors: 0 },
       toolCounts: {},
       filesTouched: [],
       failedSteps: [],

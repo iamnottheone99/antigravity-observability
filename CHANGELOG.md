@@ -2,6 +2,16 @@
 
 All notable changes to the Antigravity Observability Companion will be documented in this file.
 
+## [1.3.0] - 2026-10-14
+
+### Added
+- **Cognitive Phase Classification Engine**: Classifies agent actions into 5 canonical phases (`EXPLORATION`, `SYNTHESIS`, `EXECUTION`, `VERIFICATION`, `RECOVERY`) with confidence scoring.
+- **Cognitive Phase Spectrum**: Segmented overview bar and interactive legend displaying session time distribution across cognitive phases.
+- **Per-Step Cognitive Badges**: Traces timeline renders distinct phase pills (`[EXPLORATION]`, `[EXECUTION]`, `[VERIFICATION]`, `[RECOVERY]`, `[SYNTHESIS]`) for every execution step.
+- **Semantic Loop Radar**: Vector and statistical n-gram similarity engine that detects semantic repetition loops (varied arguments, repeated slice reads, test retries) beyond naive exact-string matching.
+- **Connected MCP Embedding Bridge (`classifier.mjs`)**: Directly leverages local `zvec-grep` neural embeddings (`local/potion-code-16m-v2`) via dynamic resolver when present, with a fast, zero-dependency statistical n-gram fallback.
+- **Trace Search by Cognitive Phase**: Traces search input now supports queries matching cognitive phase labels directly (e.g. `recovery`, `verification`).
+
 ## [1.2.1] - 2026-10-12
 
 ### Added

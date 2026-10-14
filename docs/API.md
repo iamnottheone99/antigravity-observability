@@ -106,6 +106,31 @@ Fetches real-time token metrics, latency, step history, and error logs for a ses
   "artifactsCount": 2,
   "errorCount": 0,
   "loopDetected": null,
+  "semanticLoop": null,
+  "currentPhase": "EXPLORATION",
+  "currentPhaseLabel": "Exploration",
+  "currentPhaseColor": "#10b981",
+  "phaseCounts": {
+    "EXPLORATION": 6,
+    "SYNTHESIS": 2,
+    "EXECUTION": 2,
+    "VERIFICATION": 2,
+    "RECOVERY": 0
+  },
+  "phaseDistribution": {
+    "exploration": 50.0,
+    "synthesis": 16.7,
+    "execution": 16.7,
+    "verification": 16.7,
+    "recovery": 0.0
+  },
+  "cognitiveEngine": {
+    "engine": "zvec-grep",
+    "model": "potion-code-16m-v2",
+    "dimensions": 256,
+    "active": true,
+    "cachedVectors": 14
+  },
   "toolCounts": {
     "view_file": 6,
     "run_command": 2,
@@ -172,3 +197,18 @@ $$\text{Reliability} = \left(1 - \frac{\text{Failed Tool Executions}}{\text{Tota
 
 ### Repetition Radar
 Detects when any tool call signature (`<toolName>:<args>`) appears $\ge 3$ times within a sliding window of the last 8 tool invocations.
+
+### Semantic Loop Radar & Cosine Similarity
+Computes pairwise vector cosine similarity across step execution signatures:
+
+$$\text{Similarity}(\mathbf{u}, \mathbf{v}) = \frac{\mathbf{u} \cdot \mathbf{v}}{\|\mathbf{u}\| \|\mathbf{v}\|} = \frac{\sum_{i=1}^{d} u_i v_i}{\sqrt{\sum_{i=1}^{d} u_i^2} \sqrt{\sum_{i=1}^{d} v_i^2}}$$
+
+When local `zvec-grep` is detected, 256-dimensional dense vectors are generated using `local/potion-code-16m-v2`. When offline, a high-speed character 3-gram term-frequency cosine metric is used. Flags loops when consecutive or windowed steps exceed $\text{Similarity} \ge 0.75$.
+
+### Cognitive Phase Classification
+Classifies each step into one of 5 canonical agent lifecycle states:
+- **`EXPLORATION`**: File inspection, symbol searches, directory discovery (`view_file`, `search_web`, `zg`).
+- **`SYNTHESIS`**: Reasoning, planning, user alignment, architecture design (`ask_question`, planner thinking).
+- **`EXECUTION`**: File authoring, patching, refactoring (`replace_file_content`, `write_to_file`).
+- **`VERIFICATION`**: Testing, linting, build checks, git status (`run_command` with test/lint/git).
+- **`RECOVERY`**: Error analysis, crash debugging, exception remediation (`status === 'ERROR'`, exit code > 0).

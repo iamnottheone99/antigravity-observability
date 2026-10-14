@@ -43,11 +43,18 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
   - Quick action chips: `Pause & Explain`, `Run Tests`, and `Review Diffs`.
   - Inline prompt injector to steer the agent directly from the side panel.
   - One-click **Copy Markdown Report** for sharing session traces in PRs or issues.
-* **Loop & Stall Radar**:
-  - Sliding-window signature detector that flags repetitive tool calls ($\ge 3$ consecutive executions with identical arguments).
+* **Cognitive Phase Classification & Spectrum**:
+  - Classifies agent lifecycle actions into 5 distinct cognitive phases: **Exploration** (code search, file reads), **Synthesis** (planning, reasoning, prompt analysis), **Execution** (file modifications, code authoring), **Verification** (running tests, linters, git diffs), and **Recovery** (debugging errors, fixing failures).
+  - Dedicated **Cognitive Phase Spectrum** in the Overview tab with percentage distribution bar, engine badge, and interactive hover breakdowns.
+  - Per-step cognitive phase badges (`[EXPLORATION]`, `[EXECUTION]`, `[VERIFICATION]`, `[RECOVERY]`, `[SYNTHESIS]`) rendered in the Waterfall Activity Timeline.
+  - Traces filter search natively matches cognitive phases (e.g., searching "recovery" or "verification").
+* **Semantic Loop & Stall Radar**:
+  - Detects semantic action loops beyond exact signature matches (e.g. repeated file slicing, command variations, test retry loops) by computing vector and n-gram similarity across execution windows.
+  - Leverages local `zvec-grep` neural embeddings (`local/potion-code-16m-v2`) when present, with a high-speed zero-dependency statistical n-gram fallback.
+  - Flags loops in the real-time Alert Banner with exact similarity metrics (e.g., "Repetitive exploration loop detected (88% similarity across 3 steps)").
 * **Categorical Tool Spectrum & Skills Tagging**:
   - Segmented distribution bar grouping calls into File Edits, Shell/Terminal, Search/Read, Subagents, and per-server MCP segments.
-  - Active Skills tag row displaying live skill and MCP activations (e.g., `graphify`, `archify`, `engram`).
+  - Active Skills tag row displaying live skill and MCP activations (e.g., `graphify`, `archify`, `engram`, `zvec-grep`).
 * **Seamless Multi-Chat Auto Tracking**:
   - Automatically queries Antigravity's `conversation_summaries.db` with graceful fallback to brain directory scans across all Node.js 20+ runtimes.
   - **Auto** mode dynamically follows whichever conversation was modified most recently.
@@ -138,6 +145,7 @@ antigravity-observability/
             ├── sidecar.json # Aux pane extension declaration
             ├── package.json # ES module package configuration
             ├── main.mjs     # Node.js backend (reads transcripts & SQLite summaries)
+            ├── classifier.mjs# Cognitive phase & semantic loop embedding engine
             ├── telemetry.mjs# Pure analytics, cost calculation & loop radar
             ├── index.html   # 4-Tab client-side interface
             ├── styles.css   # Dark-mode theme-aware styling

@@ -3,6 +3,22 @@
  * Free of external framework dependencies so it can be tested and reused across runtimes.
  */
 
+import {
+  COGNITIVE_PHASES,
+  PHASE_METADATA,
+  analyzeSessionCognition,
+  classifyStepPhase,
+  detectSemanticLoop,
+} from './classifier.mjs';
+
+export {
+  COGNITIVE_PHASES,
+  PHASE_METADATA,
+  analyzeSessionCognition,
+  classifyStepPhase,
+  detectSemanticLoop,
+};
+
 /**
  * Calculates prompt cache hit percentage string bounded between 0% and 100%.
  *
@@ -440,6 +456,7 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
   const cacheSavings = calculateCacheSavings(totalCacheTokens);
   const estimatedCost = calculateCost(totalInputTokens, totalCacheTokens, totalOutputTokens);
   const loopDetected = detectRepetitionLoop(recentToolCalls, 3);
+  const cognition = analyzeSessionCognition(parsedSteps);
 
   const timedSteps = parsedSteps.filter(s => s.durationSeconds > 0);
   const avgStepDuration = timedSteps.length > 0
@@ -484,7 +501,14 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
     activeSkills: Array.from(activeSkills),
     artifactsCount,
     errorCount: failedSteps.length,
-    loopDetected,
+    loopDetected: loopDetected || cognition.semanticLoop,
+    semanticLoop: cognition.semanticLoop,
+    currentPhase: cognition.currentPhase,
+    currentPhaseLabel: cognition.currentPhaseLabel,
+    currentPhaseColor: cognition.currentPhaseColor,
+    phaseCounts: cognition.phaseCounts,
+    phaseDistribution: cognition.phaseDistribution,
+    cognitiveEngine: cognition.engineStatus,
     toolCounts,
     filesTouched: Array.from(filesTouched),
     failedSteps: failedSteps.slice(-50).reverse(),

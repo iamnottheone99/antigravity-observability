@@ -187,6 +187,59 @@
     }
   }
 
+  // Render cognitive phase distribution bar & legend
+  function renderCognitiveSpectrum(dist = {}, currentPhase = 'SYNTHESIS', currentPhaseLabel = 'Synthesis', engineStatus = {}) {
+    const barEl = $('cognitive-phase-bar');
+    const legendEl = $('cognitive-phase-legend');
+    const currentPill = $('val-current-phase');
+    const engineBadge = $('val-classifier-engine');
+
+    if (currentPill) {
+      currentPill.textContent = currentPhaseLabel || currentPhase;
+      currentPill.className = `phase-pill phase-${(currentPhase || 'synthesis').toLowerCase()}`;
+    }
+
+    if (engineBadge) {
+      if (engineStatus?.engine === 'zvec-grep' && engineStatus.active) {
+        engineBadge.textContent = `zvec-grep (${engineStatus.model || 'onnx'})`;
+        engineBadge.title = `Local neural embedding model active: ${engineStatus.dimensions || 256}-dim vectors (${engineStatus.cachedVectors || 0} cached)`;
+      } else {
+        engineBadge.textContent = 'Statistical N-Gram';
+        engineBadge.title = 'Local zero-dependency statistical n-gram fallback active';
+      }
+    }
+
+    if (!barEl || !legendEl) return;
+
+    const phases = [
+      { id: 'exploration', label: 'Exploration', color: '#10b981', pct: Number(dist.exploration) || 0, desc: 'Reading files, searching codebase' },
+      { id: 'synthesis', label: 'Synthesis', color: '#8b5cf6', pct: Number(dist.synthesis) || 0, desc: 'Planning, reasoning, user interaction' },
+      { id: 'execution', label: 'Execution', color: '#3b82f6', pct: Number(dist.execution) || 0, desc: 'Editing code, creating files' },
+      { id: 'verification', label: 'Verification', color: '#f59e0b', pct: Number(dist.verification) || 0, desc: 'Running tests, git checks, linters' },
+      { id: 'recovery', label: 'Recovery', color: '#f43f5e', pct: Number(dist.recovery) || 0, desc: 'Debugging errors, fixing exceptions' },
+    ];
+
+    const activePhases = phases.filter(p => p.pct > 0);
+
+    if (activePhases.length === 0) {
+      barEl.innerHTML = '<div style="width: 100%; height: 100%; background: var(--secondary);"></div>';
+      legendEl.innerHTML = '<span style="color: var(--muted-foreground); font-size: 10px;">No cognitive activity recorded yet</span>';
+      return;
+    }
+
+    barEl.innerHTML = activePhases.map(p =>
+      `<div class="segment" style="width: ${p.pct}%; background-color: ${p.color};" title="${p.label}: ${p.pct}% (${p.desc})"></div>`
+    ).join('');
+
+    legendEl.innerHTML = activePhases.map(p =>
+      `<div class="legend-item" title="${p.desc}">
+        <div class="legend-dot" style="background-color: ${p.color};"></div>
+        <span class="legend-name">${p.label}</span>
+        <span class="legend-pct tabular mono">${p.pct}%</span>
+      </div>`
+    ).join('');
+  }
+
   // Render vertical waterfall traces preserving expanded node drawer states
   function renderWaterfall() {
     if (!lastTelemetryData) return;
@@ -203,6 +256,8 @@
       const q = traceSearchQuery.toLowerCase();
       items = items.filter(s => {
         if (String(s.stepIndex).includes(q)) return true;
+        if (s.phase && s.phase.toLowerCase().includes(q)) return true;
+        if (s.phaseLabel && s.phaseLabel.toLowerCase().includes(q)) return true;
         if (s.category && s.category.toLowerCase().includes(q)) return true;
         if (s.tools && s.tools.some(t =>
           t.name.toLowerCase().includes(q) ||
@@ -374,6 +429,7 @@
               <div style="display: flex; align-items: center; gap: 5px;">
                 <span class="node-step-tag tabular mono">#${s.stepIndex}</span>
                 ${categoryPill}
+                ${s.phase ? `<span class="phase-pill phase-${(s.phase || 'synthesis').toLowerCase()}">${escapeHtml(s.phaseLabel || s.phase)}</span>` : ''}
               </div>
               <div class="node-timing">
                 ${tokenChip}
@@ -481,7 +537,7 @@ ${fileLines}
     const select = $('session-select');
     const currentVal = selectedConversationId;
 
-    const autoLabel = activeTitle ? `🟢 Auto (${activeTitle.slice(0, 24)})` : '🟢 Auto (Active Chat)';
+    const autoLabel = activeTitle ? `Auto (${activeTitle.slice(0, 24)})` : 'Auto (Active Chat)';
     let optionsHtml = `<option value="auto" ${currentVal === 'auto' ? 'selected' : ''}>${escapeHtml(autoLabel)}</option>`;
 
     for (const s of sessions) {
@@ -642,17 +698,24 @@ ${fileLines}
       const loopBanner = $('loop-banner');
       if (data.loopDetected) {
         loopBanner.classList.add('active');
-        $('loop-details').textContent =
-          `Tool "${data.loopDetected.tool}" has executed ${data.loopDetected.repetitions} times consecutively with identical arguments.`;
+        if (data.loopDetected.similarity) {
+          $('loop-details').textContent =
+            data.loopDetected.description || `Repetitive ${data.loopDetected.tool || 'action'} detected (${Math.round(data.loopDetected.similarity * 100)}% similarity).`;
+        } else {
+          $('loop-details').textContent =
+            `Tool "${data.loopDetected.tool}" has executed ${data.loopDetected.repetitions} times consecutively with identical arguments.`;
+        }
       } else {
         loopBanner.classList.remove('active');
       }
 
       // Telemetry change detection signature
-      const newSignature = `${data.conversationId}:${data.totalSteps}:${data.errorCount}:${data.totalTokens}:${data.latestContextTokens || 0}:${data.activeModel || ''}:${data.loopDetected?.repetitions || 0}:${(data.filesTouched || []).length}:${Object.keys(mcpServers).length}:${activeSkills.length}`;
+      const cognitiveSig = `${data.currentPhase || ''}:${data.cognitiveEngine?.engine || ''}:${data.cognitiveEngine?.cachedVectors || 0}`;
+      const newSignature = `${data.conversationId}:${data.totalSteps}:${data.errorCount}:${data.totalTokens}:${data.latestContextTokens || 0}:${data.activeModel || ''}:${data.loopDetected?.repetitions || data.loopDetected?.similarity || 0}:${(data.filesTouched || []).length}:${Object.keys(mcpServers).length}:${activeSkills.length}:${cognitiveSig}`;
       if (force || newSignature !== lastTelemetrySignature) {
         lastTelemetrySignature = newSignature;
         renderToolSpectrum(data.toolCounts || {}, data.mcpServers || {}, data.activeSkills || []);
+        renderCognitiveSpectrum(data.phaseDistribution || {}, data.currentPhase, data.currentPhaseLabel, data.cognitiveEngine);
         renderWaterfall();
         renderFiles(data.filesTouched || []);
       }

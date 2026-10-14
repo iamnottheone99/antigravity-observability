@@ -13,22 +13,34 @@ import {
   formatTokens,
   getToolCategory,
   parseTranscript,
+  COGNITIVE_PHASES,
+  PHASE_METADATA,
+  analyzeSessionCognition,
+  classifyStepPhase,
+  detectSemanticLoop,
 } from '../plugin/sidecars/panel/telemetry.mjs';
+
+import {
+  cosineSimilarity,
+  computeNgramSimilarity,
+  getStepSemanticSignature,
+  getEmbeddingEngineStatus,
+} from '../plugin/sidecars/panel/classifier.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 const PLUGIN = join(ROOT, 'plugin');
 
-console.log('🧪 Running Antigravity Observability Test Suite...\n');
+console.log('[Test Suite] Running Antigravity Observability Test Suite...\n');
 
 let failed = false;
 
 function runTest(name, fn) {
   try {
     fn();
-    console.log(`  ✓ ${name}`);
+    console.log(`  PASS: ${name}`);
   } catch (err) {
-    console.error(`  ✗ ${name}`);
+    console.error(`  FAIL: ${name}`);
     console.error(`    Error: ${err.message}`);
     failed = true;
   }
@@ -37,12 +49,12 @@ function runTest(name, fn) {
 // -----------------------------------------------------------------------------
 // 1. Manifest & File Validation
 // -----------------------------------------------------------------------------
-console.log('📦 Manifest & Structure Checks:');
+console.log('[Manifest & Structure Checks]');
 
 runTest('plugin.json is valid and contains expected metadata', () => {
   const data = JSON.parse(readFileSync(join(PLUGIN, 'plugin.json'), 'utf8'));
   assert.equal(data.name, 'agent-observability');
-  assert.equal(data.version, '1.2.1');
+  assert.equal(data.version, '1.3.0');
   assert.ok(data.description && data.description.length > 0);
   assert.equal(data.logo, 'assets/logo.svg');
 });
@@ -59,18 +71,18 @@ runTest('sidecar.json defines auxiliary pane entrypoint', () => {
 runTest('sidecars package.json defines ES module and matches version', () => {
   const data = JSON.parse(readFileSync(join(PLUGIN, 'sidecars/panel/package.json'), 'utf8'));
   assert.equal(data.type, 'module');
-  assert.equal(data.version, '1.2.1');
+  assert.equal(data.version, '1.3.0');
 });
 
 runTest('root package.json is valid and declares engines', () => {
   const data = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   assert.equal(data.name, 'antigravity-observability');
-  assert.equal(data.version, '1.2.1');
+  assert.equal(data.version, '1.3.0');
   assert.equal(data.type, 'module');
   assert.ok(data.engines?.node, 'Missing engines.node definition');
 });
 
-runTest('HTML layout contains all 4 tabs, CSP, and ARIA roles', () => {
+runTest('HTML layout contains all 4 tabs, CSP, ARIA roles, and cognitive phase components', () => {
   const html = readFileSync(join(PLUGIN, 'sidecars/panel/index.html'), 'utf8');
   assert.ok(html.includes('id="pane-overview"'), 'Missing pane-overview');
   assert.ok(html.includes('id="pane-traces"'), 'Missing pane-traces');
@@ -80,6 +92,10 @@ runTest('HTML layout contains all 4 tabs, CSP, and ARIA roles', () => {
   assert.ok(html.includes('id="btn-refresh"'), 'Missing refresh button');
   assert.ok(html.includes('id="val-cache-rate"'), 'Missing Cache Hits tile value');
   assert.ok(html.includes('id="spectrum-skills"'), 'Missing spectrum-skills container');
+  assert.ok(html.includes('id="val-current-phase"'), 'Missing val-current-phase element');
+  assert.ok(html.includes('id="cognitive-phase-bar"'), 'Missing cognitive-phase-bar element');
+  assert.ok(html.includes('id="cognitive-phase-legend"'), 'Missing cognitive-phase-legend element');
+  assert.ok(html.includes('id="val-classifier-engine"'), 'Missing val-classifier-engine element');
   assert.ok(html.includes('id="btn-copy-report"'), 'Missing copy report button');
   assert.ok(html.includes('Content-Security-Policy'), 'Missing Content-Security-Policy meta tag');
   assert.ok(html.includes('role="tablist"'), 'Missing role="tablist"');
@@ -91,7 +107,7 @@ runTest('HTML layout contains all 4 tabs, CSP, and ARIA roles', () => {
 // -----------------------------------------------------------------------------
 // 2. Syntax Verification
 // -----------------------------------------------------------------------------
-console.log('\n🔍 Syntax Verification:');
+console.log('\n[Syntax Verification]');
 
 function checkJsSyntax(relPath) {
   runTest(`Syntax OK: ${relPath}`, () => {
@@ -101,6 +117,7 @@ function checkJsSyntax(relPath) {
 
 checkJsSyntax('plugin/sidecars/panel/main.mjs');
 checkJsSyntax('plugin/sidecars/panel/telemetry.mjs');
+checkJsSyntax('plugin/sidecars/panel/classifier.mjs');
 checkJsSyntax('plugin/sidecars/panel/app.js');
 checkJsSyntax('scripts/install.mjs');
 checkJsSyntax('scripts/test.mjs');
@@ -108,7 +125,7 @@ checkJsSyntax('scripts/test.mjs');
 // -----------------------------------------------------------------------------
 // 3. Telemetry Engine Unit Tests
 // -----------------------------------------------------------------------------
-console.log('\n⚡ Telemetry Engine Unit Tests:');
+console.log('\n[Telemetry Engine Unit Tests]');
 
 runTest('calculateCacheHitRate handles zero and invalid values', () => {
   assert.equal(calculateCacheHitRate(0, 0), '0%');
@@ -156,7 +173,6 @@ runTest('detectRepetitionLoop detects strictly consecutive identical tool calls'
 });
 
 runTest('detectRepetitionLoop does not trigger false positives on alternating patterns', () => {
-  // Common edit-inspect cycle: view, edit, view, edit, view
   const alternating = [
     { name: 'view_file', signature: 'view_file:foo.txt' },
     { name: 'replace_file_content', signature: 'replace_file_content:foo.txt' },
@@ -186,6 +202,7 @@ runTest('parseTranscript handles empty or malformed input safely', () => {
   assert.equal(res.estimatedCost, '$0.0000');
   assert.equal(res.cacheHitRate, '0%');
   assert.equal(res.errorCount, 0);
+  assert.equal(res.currentPhase, 'SYNTHESIS');
   assert.deepEqual(res.filesTouched, []);
 });
 
@@ -255,6 +272,11 @@ runTest('parseTranscript aggregates token metrics, steps, latencies, and touched
   assert.equal(report.toolCounts['write_to_file'], 1);
   assert.equal(report.toolCounts['run_command'], 1);
 
+  // Cognitive fields in report
+  assert.ok(report.currentPhase);
+  assert.ok(report.phaseDistribution);
+  assert.ok(report.cognitiveEngine);
+
   // Duration checks
   assert.equal(report.recentSteps[2].durationSeconds, 0);
   assert.equal(report.recentSteps[1].durationSeconds, 2.5);
@@ -300,6 +322,7 @@ runTest('parseTranscript captures rich arguments, tool outputs, thinking, and pe
   assert.equal(step.tools[0].primaryArg, '$ git status');
   assert.equal(step.tools[0].args.CommandLine, 'git status');
   assert.equal(step.tools[0].category, 'shell');
+  assert.equal(step.phase, 'VERIFICATION');
 });
 
 runTest('parseTranscript detects model settings changes, compactions, and subagents', () => {
@@ -341,9 +364,137 @@ runTest('parseTranscript detects model settings changes, compactions, and subage
 });
 
 // -----------------------------------------------------------------------------
-// 4. Frontend Helper Unit Tests
+// 4. Cognitive Classifier & Semantic Loop Unit Tests
 // -----------------------------------------------------------------------------
-console.log('\n🎨 Frontend Helper Unit Tests:');
+console.log('\n[Cognitive Classifier & Semantic Loop Tests]');
+
+runTest('cosineSimilarity computes normalized vector dot-products accurately', () => {
+  assert.equal(cosineSimilarity([1, 0, 0], [1, 0, 0]), 1.0);
+  assert.equal(cosineSimilarity([1, 0, 0], [0, 1, 0]), 0);
+  assert.equal(cosineSimilarity([], []), 0);
+  assert.equal(cosineSimilarity(null, undefined), 0);
+  assert.equal(cosineSimilarity([1, 2], [1, 2, 3]), 0); // length mismatch
+
+  const vA = [0.5, 0.5, 0.5, 0.5];
+  const vB = [0.5, 0.5, 0.5, 0.5];
+  assert.equal(cosineSimilarity(vA, vB).toFixed(4), '1.0000');
+});
+
+runTest('computeNgramSimilarity matches strings and slices proportionally', () => {
+  assert.equal(computeNgramSimilarity('identical text', 'identical text'), 1.0);
+  assert.equal(computeNgramSimilarity('', 'test'), 0);
+  assert.equal(computeNgramSimilarity('apple banana', 'xyz 1234'), 0);
+
+  const slice1 = 'view_file c:/project/telemetry.mjs:1-50 Reading telemetry';
+  const slice2 = 'view_file c:/project/telemetry.mjs:51-100 Reading telemetry';
+  const sim = computeNgramSimilarity(slice1, slice2, 3);
+  assert.ok(sim > 0.80, `Expected similarity > 0.80 for slices, got ${sim}`);
+});
+
+runTest('classifyStepPhase categorizes each cognitive phase accurately', () => {
+  // Exploration
+  const exploreStep = {
+    tools: [{ name: 'view_file', primaryArg: 'src/main.js' }],
+  };
+  assert.equal(classifyStepPhase(exploreStep).phase, COGNITIVE_PHASES.EXPLORATION);
+
+  // Execution
+  const editStep = {
+    tools: [{ name: 'replace_file_content', primaryArg: 'src/main.js' }],
+  };
+  assert.equal(classifyStepPhase(editStep).phase, COGNITIVE_PHASES.EXECUTION);
+
+  // Verification
+  const verifyStep = {
+    tools: [{ name: 'run_command', primaryArg: '$ npm test' }],
+  };
+  assert.equal(classifyStepPhase(verifyStep).phase, COGNITIVE_PHASES.VERIFICATION);
+
+  // Recovery
+  const errStep = {
+    status: 'ERROR',
+    content: 'Process terminated with exit status 1',
+  };
+  assert.equal(classifyStepPhase(errStep).phase, COGNITIVE_PHASES.RECOVERY);
+
+  // Synthesis
+  const synthStep = {
+    source: 'MODEL',
+    thinking: 'Planning out the architectural refactoring steps.',
+    tools: [],
+  };
+  assert.equal(classifyStepPhase(synthStep).phase, COGNITIVE_PHASES.SYNTHESIS);
+});
+
+runTest('detectSemanticLoop catches repetitive slice loops and command variations', () => {
+  // Repeated slice reads
+  const sliceSteps = [
+    { tools: [{ name: 'view_file', primaryArg: 'foo.js:1-50' }] },
+    { tools: [{ name: 'view_file', primaryArg: 'foo.js:51-100' }] },
+    { tools: [{ name: 'view_file', primaryArg: 'foo.js:101-150' }] },
+  ];
+  const sliceLoop = detectSemanticLoop(sliceSteps, 0.75, 3);
+  assert.ok(sliceLoop);
+  assert.equal(sliceLoop.detected, true);
+  assert.equal(sliceLoop.tool, 'view_file');
+  assert.equal(sliceLoop.phase, 'EXPLORATION');
+  assert.ok(sliceLoop.similarity >= 0.75);
+
+  // Varied command loops
+  const cmdSteps = [
+    { tools: [{ name: 'run_command', primaryArg: '$ npm test' }] },
+    { tools: [{ name: 'run_command', primaryArg: '$ npm test -- --verbose' }] },
+    { tools: [{ name: 'run_command', primaryArg: '$ npm test -- --bail' }] },
+  ];
+  const cmdLoop = detectSemanticLoop(cmdSteps, 0.75, 3);
+  assert.ok(cmdLoop);
+  assert.equal(cmdLoop.tool, 'run_command');
+  assert.equal(cmdLoop.phase, 'VERIFICATION');
+
+  // Alternating cycle should NOT trigger
+  const healthyCycle = [
+    { tools: [{ name: 'view_file', primaryArg: 'foo.js' }] },
+    { tools: [{ name: 'replace_file_content', primaryArg: 'foo.js' }] },
+    { tools: [{ name: 'view_file', primaryArg: 'foo.js' }] },
+    { tools: [{ name: 'replace_file_content', primaryArg: 'foo.js' }] },
+    { tools: [{ name: 'view_file', primaryArg: 'foo.js' }] },
+  ];
+  assert.equal(detectSemanticLoop(healthyCycle, 0.75, 3), null);
+});
+
+runTest('analyzeSessionCognition annotates steps and computes distribution percentages', () => {
+  const steps = [
+    { tools: [{ name: 'view_file', primaryArg: 'foo.js' }] },
+    { tools: [{ name: 'replace_file_content', primaryArg: 'foo.js' }] },
+    { tools: [{ name: 'run_command', primaryArg: '$ npm test' }] },
+    { status: 'ERROR', content: 'exit status 1' },
+    { type: 'USER_INPUT', content: 'Please fix the failing tests.' },
+  ];
+
+  const analysis = analyzeSessionCognition(steps);
+  assert.equal(analysis.currentPhase, 'SYNTHESIS');
+  assert.equal(analysis.phaseCounts.EXPLORATION, 1);
+  assert.equal(analysis.phaseCounts.EXECUTION, 1);
+  assert.equal(analysis.phaseCounts.VERIFICATION, 1);
+  assert.equal(analysis.phaseCounts.RECOVERY, 1);
+  assert.equal(analysis.phaseCounts.SYNTHESIS, 1);
+
+  assert.equal(analysis.phaseDistribution.exploration, 20.0);
+  assert.equal(analysis.phaseDistribution.execution, 20.0);
+  assert.equal(analysis.phaseDistribution.verification, 20.0);
+  assert.equal(analysis.phaseDistribution.recovery, 20.0);
+  assert.equal(analysis.phaseDistribution.synthesis, 20.0);
+
+  // Each step was annotated with badge and color
+  assert.equal(steps[0].phase, 'EXPLORATION');
+  assert.ok(steps[0].phaseColor);
+  assert.ok(steps[0].phaseBadge);
+});
+
+// -----------------------------------------------------------------------------
+// 5. Frontend Helper Unit Tests
+// -----------------------------------------------------------------------------
+console.log('\n[Frontend Helper Unit Tests]');
 
 runTest('getToolCategory classifies tools into proper categories', () => {
   assert.equal(getToolCategory('replace_file_content').id, 'file');
@@ -378,8 +529,8 @@ runTest('escapeHtml escapes dangerous HTML entities', () => {
 // Summary
 // -----------------------------------------------------------------------------
 if (failed) {
-  console.error('\n❌ Test suite finished with failures.');
+  console.error('\nFAILURE: Test suite finished with failures.');
   process.exit(1);
 } else {
-  console.log('\n🎉 All checks and unit tests passed successfully!');
+  console.log('\nSUCCESS: All checks and unit tests passed successfully!');
 }

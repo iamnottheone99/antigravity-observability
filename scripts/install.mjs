@@ -8,7 +8,7 @@ const SOURCE = join(HERE, '..', 'plugin');
 const TARGET_BASE = join(homedir(), '.gemini', 'config', 'plugins');
 const TARGET = join(TARGET_BASE, 'agent-observability');
 
-console.log('📦 Installing Antigravity Observability Extension...');
+console.log('[Install] Installing Antigravity Observability Extension...');
 console.log(`Source: ${SOURCE}`);
 console.log(`Target: ${TARGET}`);
 
@@ -19,12 +19,12 @@ try {
 
   cpSync(SOURCE, TARGET, { recursive: true });
 
-  console.log('\n✅ Successfully installed agent-observability plugin!');
+  console.log('\n[SUCCESS] Successfully installed agent-observability plugin!');
   console.log('\nNext steps:');
   console.log('1. In Google Antigravity, click "Customizations" in the left sidebar.');
   console.log('2. Under the "Installed" tab, toggle "agent-observability" ON (or OFF and ON to reload).');
   console.log('3. Open any conversation, click ⋮ (three-dot menu) -> Extensions -> Observability.');
 } catch (err) {
-  console.error(`\n❌ Installation failed: ${err.message}`);
+  console.error(`\n[ERROR] Installation failed: ${err.message}`);
   process.exit(1);
 }
