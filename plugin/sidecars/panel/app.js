@@ -157,16 +157,17 @@
 
     const segmentsHtml = Object.values(categories).map(cat => {
       const pct = ((cat.count / totalCalls) * 100).toFixed(1);
-      return `<div class="segment ${cat.cls}" style="width: ${pct}%; background-color: ${cat.color};" title="${cat.label}: ${cat.count} (${pct}%)"></div>`;
+      return `<div class="segment ${escapeHtml(cat.cls)}" style="width: ${pct}%; background-color: ${cat.color};" title="${escapeHtml(cat.label)}: ${cat.count} (${pct}%)"></div>`;
     }).join('');
     barEl.innerHTML = segmentsHtml;
 
     const legendHtml = Object.values(categories).map(cat => {
       const pct = Math.round((cat.count / totalCalls) * 100);
+      const toolDetails = cat.tools.map(t => `${t.name} (${t.count})`).join(', ');
       return `
-        <div class="legend-item" title="${cat.tools.map(t => `${t.name} (${t.count})`).join(', ')}">
+        <div class="legend-item" title="${escapeHtml(toolDetails)}">
           <span class="legend-dot" style="background: ${cat.color};"></span>
-          <span>${cat.label}</span>
+          <span>${escapeHtml(cat.label)}</span>
           <span class="tabular mono" style="color: var(--muted-foreground); font-size: 9.5px;">${pct}%</span>
         </div>
       `;
@@ -228,13 +229,13 @@
     }
 
     barEl.innerHTML = activePhases.map(p =>
-      `<div class="segment" style="width: ${p.pct}%; background-color: ${p.color};" title="${p.label}: ${p.pct}% (${p.desc})"></div>`
+      `<div class="segment" style="width: ${p.pct}%; background-color: ${p.color};" title="${escapeHtml(p.label)}: ${p.pct}% (${escapeHtml(p.desc)})"></div>`
     ).join('');
 
     legendEl.innerHTML = activePhases.map(p =>
-      `<div class="legend-item" title="${p.desc}">
+      `<div class="legend-item" title="${escapeHtml(p.desc)}">
         <div class="legend-dot" style="background-color: ${p.color};"></div>
-        <span class="legend-name">${p.label}</span>
+        <span class="legend-name">${escapeHtml(p.label)}</span>
         <span class="legend-pct tabular mono">${p.pct}%</span>
       </div>`
     ).join('');
