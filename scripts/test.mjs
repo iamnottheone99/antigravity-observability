@@ -90,7 +90,7 @@ runTest('HTML layout contains all 4 tabs, CSP, ARIA roles, and cognitive phase c
   assert.ok(html.includes('id="pane-steer"'), 'Missing pane-steer');
   assert.ok(html.includes('id="btn-toggle-monitor"'), 'Missing power toggle');
   assert.ok(html.includes('id="btn-refresh"'), 'Missing refresh button');
-  assert.ok(html.includes('id="val-cache-rate"'), 'Missing Cache Hits tile value');
+  assert.ok(html.includes('id="val-context"'), 'Missing Context Window tile value');
   assert.ok(html.includes('id="spectrum-skills"'), 'Missing spectrum-skills container');
   assert.ok(html.includes('id="val-current-phase"'), 'Missing val-current-phase element');
   assert.ok(html.includes('id="cognitive-phase-bar"'), 'Missing cognitive-phase-bar element');

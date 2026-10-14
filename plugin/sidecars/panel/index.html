@@ -98,24 +98,7 @@
 
       <!-- KPI Metric Tiles Grid -->
       <section class="grid" aria-label="Session key metrics">
-        <!-- 1. Cache Hits Tile -->
-        <div class="tile">
-          <div class="tile-top">
-            <span class="tile-label">Cache Hits</span>
-            <svg class="icon" aria-hidden="true" style="color: var(--muted-foreground);" viewBox="0 0 24 24">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-            </svg>
-          </div>
-          <div id="val-cache-rate" class="tile-value mono tabular">0%</div>
-          <div class="tile-footer">
-            <span id="val-cache-sub" class="tabular">0 cached</span>
-            <div class="micro-bar" style="width: 44px;" title="Prompt cache hit rate">
-              <div id="bar-cache-fill" class="micro-bar-fill cache" style="width: 0%;"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 2. Active Context Window Tile (Antigravity-specific) -->
+        <!-- 1. Active Context Window Tile (Antigravity-specific) -->
         <div class="tile">
           <div class="tile-top">
             <span class="tile-label">Context Window</span>
@@ -183,8 +166,8 @@
           </div>
         </div>
 
-        <!-- 6. Antigravity Ecosystem Tile -->
-        <div class="tile">
+        <!-- 5. Antigravity Ecosystem Tile -->
+        <div class="tile tile-span-2">
           <div class="tile-top">
             <span class="tile-label">Ecosystem</span>
             <svg class="icon" aria-hidden="true" style="color: var(--muted-foreground);" viewBox="0 0 24 24">

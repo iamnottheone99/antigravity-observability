@@ -422,6 +422,10 @@ body {
   border-color: rgba(255, 255, 255, 0.16);
 }
 
+.tile-span-2 {
+  grid-column: span 2;
+}
+
 .tile-top {
   display: flex;
   align-items: center;

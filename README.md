@@ -14,11 +14,10 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
 
 ## Features
 
-* **Prompt Cache Analytics & Cache Hits**:
-  - Dedicated **Cache Hits** overview tile highlighting prompt cache hit percentage as the primary KPI.
-  - Displays cached token volume with hover tooltips detailing prompt cache dollar savings ($0.1125 / 1M tokens saved).
-  - Mathematically bounded Prompt Cache Hit Rate gauge ($\frac{\text{cached}}{\text{uncached} + \text{cached}} \times 100\%$).
-  - Breakdown of fresh prompt tokens, cached prompt hits, and completion tokens.
+* **Prompt Cache Analytics**:
+  - Detailed prompt cache savings ($0.1125 / 1M tokens saved) and token breakdown in session reports.
+  - Mathematically bounded Prompt Cache Hit Rate calculation ($\frac{\text{cached}}{\text{uncached} + \text{cached}} \times 100\%$).
+  - Per-step breakdown of fresh prompt tokens, cached prompt hits, and completion tokens in trace drawers.
 * **Antigravity Context Window & Headroom Meter**:
   - Live tracking of active context window volume against the 1.0M Gemini token limit.
   - Visual load percentage bar with amber warning ($\ge 70\%$) and red danger ($\ge 85\%$) thresholds.
