@@ -18,6 +18,9 @@ import {
   analyzeSessionCognition,
   classifyStepPhase,
   detectSemanticLoop,
+  ERROR_CATEGORIES,
+  classifyError,
+  calculateAgentHealth,
 } from '../plugin/sidecars/panel/telemetry.mjs';
 
 import {
@@ -54,7 +57,7 @@ console.log('[Manifest & Structure Checks]');
 runTest('plugin.json is valid and contains expected metadata', () => {
   const data = JSON.parse(readFileSync(join(PLUGIN, 'plugin.json'), 'utf8'));
   assert.equal(data.name, 'agent-observability');
-  assert.equal(data.version, '1.3.0');
+  assert.equal(data.version, '1.4.0');
   assert.ok(data.description && data.description.length > 0);
   assert.equal(data.logo, 'assets/logo.svg');
 });
@@ -71,13 +74,13 @@ runTest('sidecar.json defines auxiliary pane entrypoint', () => {
 runTest('sidecars package.json defines ES module and matches version', () => {
   const data = JSON.parse(readFileSync(join(PLUGIN, 'sidecars/panel/package.json'), 'utf8'));
   assert.equal(data.type, 'module');
-  assert.equal(data.version, '1.3.0');
+  assert.equal(data.version, '1.4.0');
 });
 
 runTest('root package.json is valid and declares engines', () => {
   const data = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   assert.equal(data.name, 'antigravity-observability');
-  assert.equal(data.version, '1.3.0');
+  assert.equal(data.version, '1.4.0');
   assert.equal(data.type, 'module');
   assert.ok(data.engines?.node, 'Missing engines.node definition');
 });
@@ -98,6 +101,12 @@ runTest('HTML layout contains all 4 tabs, CSP, ARIA roles, and cognitive phase c
   assert.ok(html.includes('id="val-classifier-engine"'), 'Missing val-classifier-engine element');
   assert.ok(html.includes('id="btn-copy-report"'), 'Missing copy report button');
   assert.ok(html.includes('Content-Security-Policy'), 'Missing Content-Security-Policy meta tag');
+  assert.ok(html.includes('id="val-health-score"'), 'Missing val-health-score element');
+  assert.ok(html.includes('id="badge-health-grade"'), 'Missing badge-health-grade element');
+  assert.ok(html.includes('id="bar-health-fill"'), 'Missing bar-health-fill element');
+  assert.ok(html.includes('class="health-scorecard-section"'), 'Missing health-scorecard-section');
+  assert.ok(html.includes('class="error-taxonomy-section"'), 'Missing error-taxonomy-section');
+  assert.ok(html.includes('id="error-clusters-filter"'), 'Missing error-clusters-filter');
   assert.ok(html.includes('role="tablist"'), 'Missing role="tablist"');
   assert.ok(html.includes('role="tabpanel"'), 'Missing role="tabpanel"');
   assert.ok(html.includes('aria-label="Select conversation to observe"'), 'Missing select aria-label');
@@ -361,6 +370,163 @@ runTest('parseTranscript detects model settings changes, compactions, and subage
   assert.equal(report.latestContextTokens, 5000);
   assert.equal(report.contextLoadPercent, '0.5%');
   assert.equal(report.cacheSavings, '$0.0004');
+});
+
+runTest('classifyError categorizes all 8 error taxonomy categories accurately', () => {
+  // 1. Path not found
+  const pathErr1 = classifyError('GetFileAttributesEx c:\\Users\\test\\missing.txt: The system cannot find the path specified.');
+  assert.equal(pathErr1.id, ERROR_CATEGORIES.PATH_NOT_FOUND.id);
+  assert.equal(pathErr1.summary, 'File not found: missing.txt');
+
+  const pathErr2 = classifyError('ENOENT: no such file or directory, open "c:/project/foo.js"');
+  assert.equal(pathErr2.id, ERROR_CATEGORIES.PATH_NOT_FOUND.id);
+
+  // 2. Edit conflict
+  const editErr1 = classifyError('target content not found in file chunk 1');
+  assert.equal(editErr1.id, ERROR_CATEGORIES.EDIT_CONFLICT.id);
+
+  const editErr2 = classifyError('TargetContent chunk mismatch: Could not successfully apply any edits');
+  assert.equal(editErr2.id, ERROR_CATEGORIES.EDIT_CONFLICT.id);
+
+  // 3. MCP Protocol error
+  const mcpErr1 = classifyError('{"error": {"code": -32603, "message": "unknown_project"}}', 'call_mcp_tool');
+  assert.equal(mcpErr1.id, ERROR_CATEGORIES.MCP_ERROR.id);
+
+  const mcpErr2 = classifyError('Encountered error in tool execution from MCP server');
+  assert.equal(mcpErr2.id, ERROR_CATEGORIES.MCP_ERROR.id);
+
+  // 4. Permission error
+  const permErr = classifyError('EACCES: permission denied, open /etc/shadow');
+  assert.equal(permErr.id, ERROR_CATEGORIES.PERMISSION.id);
+
+  // 5. Validation error
+  const valErr = classifyError('invalid tool call: missing required parameter TargetFile');
+  assert.equal(valErr.id, ERROR_CATEGORIES.VALIDATION.id);
+
+  // 6. Timeout error
+  const timeErr = classifyError('ETIMEDOUT: operation timed out after 30000ms');
+  assert.equal(timeErr.id, ERROR_CATEGORIES.TIMEOUT.id);
+
+  // 7. Command failed
+  const cmdErr = classifyError('Process terminated with exit status 1', 'run_command');
+  assert.equal(cmdErr.id, ERROR_CATEGORIES.COMMAND_FAILED.id);
+  assert.equal(cmdErr.summary, 'Process terminated with exit status 1');
+
+  // 8. General runtime fallback
+  const runtimeErr = classifyError('TypeError: Cannot read properties of undefined');
+  assert.equal(runtimeErr.id, ERROR_CATEGORIES.RUNTIME.id);
+});
+
+runTest('calculateAgentHealth computes weighted scorecards, grades, and diagnostics', () => {
+  // Baseline clean execution (Optimal A+)
+  const cleanHealth = calculateAgentHealth({
+    totalSteps: 10,
+    toolCounts: { run_command: 5, view_file: 5 },
+    failedSteps: [],
+  });
+  assert.equal(cleanHealth.score, 100);
+  assert.equal(cleanHealth.grade, 'Optimal');
+  assert.equal(cleanHealth.pillars.toolReliability, 100);
+  assert.equal(cleanHealth.pillars.loopRadar, 100);
+  assert.equal(cleanHealth.pillars.phaseBalance, 100);
+  assert.equal(cleanHealth.pillars.contextEconomy, 100);
+
+  // Tool reliability penalty with recovery credit
+  const errHealth = calculateAgentHealth({
+    totalSteps: 10,
+    toolCounts: { run_command: 8, view_file: 2 },
+    failedSteps: [{ content: 'exit status 1' }, { content: 'exit status 1' }],
+  });
+  // 10 calls, 2 errors, 2 recovered: rawRate = 80, recoveryBonus = 10 -> reliability = 90
+  assert.equal(errHealth.pillars.toolReliability, 90);
+
+  // Loop radar penalty on consecutive repetitions
+  const loopHealth = calculateAgentHealth({
+    loopDetected: { repetitions: 4, tool: 'run_command' },
+  });
+  // 100 - (4 * 12) = 52
+  assert.equal(loopHealth.pillars.loopRadar, 52);
+
+  // Phase imbalance penalty (unverified execution)
+  const unverifiedHealth = calculateAgentHealth({
+    cognition: {
+      phaseDistribution: { execution: 30, verification: 0, exploration: 70 },
+    },
+  });
+  assert.equal(unverifiedHealth.pillars.phaseBalance, 70); // 100 - 30
+  assert.ok(unverifiedHealth.deductions.some(d => d.includes('Unverified modifications')));
+
+  // Context economy penalty (compactions and near-capacity load)
+  const contextHeavyHealth = calculateAgentHealth({
+    compactionsCount: 2,
+    latestContextTokens: 900000,
+    contextLimit: 1000000, // 90% load
+  });
+  // compactions: 100 - 30 = 70; load >= 85%: 70 - 25 = 45
+  assert.equal(contextHeavyHealth.pillars.contextEconomy, 45);
+  assert.ok(contextHeavyHealth.deductions.some(d => d.includes('2 context compactions')));
+  assert.ok(contextHeavyHealth.deductions.some(d => d.includes('saturation')));
+
+  // Clamped and degraded grade
+  const degradedHealth = calculateAgentHealth({
+    toolCounts: { run_command: 5 },
+    failedSteps: [1, 2, 3, 4, 5],
+    loopDetected: { repetitions: 8 },
+    compactionsCount: 4,
+  });
+  assert.ok(degradedHealth.score < 60);
+  assert.equal(degradedHealth.grade, 'Degraded');
+});
+
+runTest('parseTranscript embeds health scorecard and error taxonomy clusters', () => {
+  const log = [
+    JSON.stringify({
+      step_index: 0,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      tool_calls: [{ name: 'view_file', args: { AbsolutePath: 'missing.txt' } }],
+    }),
+    JSON.stringify({
+      step_index: 1,
+      source: 'SYSTEM',
+      type: 'TOOL_RESPONSE',
+      status: 'ERROR',
+      content: 'GetFileAttributesEx c:\\test\\missing.txt: The system cannot find the path specified.',
+    }),
+    JSON.stringify({
+      step_index: 2,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      tool_calls: [{ name: 'run_command', args: { CommandLine: 'npm test' } }],
+    }),
+    JSON.stringify({
+      step_index: 3,
+      source: 'SYSTEM',
+      type: 'TOOL_RESPONSE',
+      status: 'ERROR',
+      content: 'Process terminated with exit status 1',
+    }),
+  ].join('\n');
+
+  const report = parseTranscript(log, { conversationId: 'conv-health-taxonomy' });
+
+  // Health Scorecard assertions
+  assert.ok(report.healthScorecard);
+  assert.ok(typeof report.healthScorecard.score === 'number');
+  assert.ok(report.healthScorecard.grade);
+  assert.ok(report.healthScorecard.pillars);
+  assert.ok(report.healthScorecard.pillars.toolReliability >= 0);
+  assert.ok(report.healthScorecard.pillars.loopRadar >= 0);
+  assert.ok(report.healthScorecard.pillars.phaseBalance >= 0);
+  assert.ok(report.healthScorecard.pillars.contextEconomy >= 0);
+
+  // Error Taxonomy assertions
+  assert.ok(report.errorTaxonomy);
+  assert.equal(report.errorCount, 2);
+  assert.equal(report.errorTaxonomy.path_not_found.count, 1);
+  assert.equal(report.errorTaxonomy.command_failed.count, 1);
+  assert.equal(report.failedSteps[0].errorTaxonomy.id, 'command_failed');
+  assert.equal(report.failedSteps[1].errorTaxonomy.id, 'path_not_found');
 });
 
 // -----------------------------------------------------------------------------

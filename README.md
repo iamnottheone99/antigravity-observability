@@ -14,6 +14,25 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
 
 ## Features
 
+* **Automated Agent Efficiency & Health Scorecard**:
+  - Live 0–100 composite session evaluation score evaluating agent execution cleanliness and stability.
+  - 4 weighted core pillars: **Tool Reliability** (30%, with error recovery bonus), **Loop Radar** (25%, penalizing consecutive and semantic loops), **Phase Balance** (25%, detecting unverified modifications or exploratory churn), and **Context Economy** (20%, tracking compaction frequency and headroom load).
+  - Diagnostic grade badges: `Optimal` (emerald $\ge 90$), `Healthy` (blue 75–89), `Attention` (amber 60–74), and `Degraded` (rose $< 60$).
+  - Expandable pillar breakdown with live micro-bars and actionable diagnostic deductions.
+* **Error Taxonomy & Root-Cause Clustering**:
+  - Automated zero-dependency classification of tool exceptions and execution failures into 8 standardized root causes: **File / Path Not Found**, **Edit Target Mismatch**, **Command Execution Failure**, **MCP Protocol Error**, **Tool Schema Error**, **Permission Denied**, **Timeout / Aborted**, and **General Runtime**.
+  - Overview distribution bar with color-coded segments and total error count.
+  - Interactive drill-down: clicking any error cluster pill in Overview jumps directly to Traces filtered strictly to that specific error root cause.
+  - Dedicated sub-filter chips container in the Traces tab for rapid one-click root-cause filtering.
+* **Cognitive Phase Classification & Spectrum**:
+  - Classifies agent lifecycle actions into 5 distinct cognitive phases: **Exploration** (code search, file reads), **Synthesis** (planning, reasoning, prompt analysis), **Execution** (file modifications, code authoring), **Verification** (running tests, linters, git diffs), and **Recovery** (debugging errors, fixing failures).
+  - Dedicated **Cognitive Phase Spectrum** in the Overview tab with percentage distribution bar, engine badge, and interactive hover breakdowns.
+  - Per-step cognitive phase badges (`[EXPLORATION]`, `[EXECUTION]`, `[VERIFICATION]`, `[RECOVERY]`, `[SYNTHESIS]`) rendered in the Waterfall Activity Timeline.
+  - Traces filter search natively matches cognitive phases (e.g., searching "recovery" or "verification").
+* **Semantic Loop & Stall Radar**:
+  - Detects semantic action loops beyond exact signature matches (e.g. repeated file slicing, command variations, test retry loops) by computing vector and n-gram similarity across execution windows.
+  - Leverages local `zvec-grep` neural embeddings (`local/potion-code-16m-v2`) when present, with a high-speed zero-dependency statistical n-gram fallback.
+  - Flags loops in the real-time Alert Banner with exact similarity metrics (e.g., "Repetitive exploration loop detected (88% similarity across 3 steps)").
 * **Prompt Cache Analytics**:
   - Detailed prompt cache savings ($0.1125 / 1M tokens saved) and token breakdown in session reports.
   - Mathematically bounded Prompt Cache Hit Rate calculation ($\frac{\text{cached}}{\text{uncached} + \text{cached}} \times 100\%$).
@@ -42,15 +61,6 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
   - Quick action chips: `Pause & Explain`, `Run Tests`, and `Review Diffs`.
   - Inline prompt injector to steer the agent directly from the side panel.
   - One-click **Copy Markdown Report** for sharing session traces in PRs or issues.
-* **Cognitive Phase Classification & Spectrum**:
-  - Classifies agent lifecycle actions into 5 distinct cognitive phases: **Exploration** (code search, file reads), **Synthesis** (planning, reasoning, prompt analysis), **Execution** (file modifications, code authoring), **Verification** (running tests, linters, git diffs), and **Recovery** (debugging errors, fixing failures).
-  - Dedicated **Cognitive Phase Spectrum** in the Overview tab with percentage distribution bar, engine badge, and interactive hover breakdowns.
-  - Per-step cognitive phase badges (`[EXPLORATION]`, `[EXECUTION]`, `[VERIFICATION]`, `[RECOVERY]`, `[SYNTHESIS]`) rendered in the Waterfall Activity Timeline.
-  - Traces filter search natively matches cognitive phases (e.g., searching "recovery" or "verification").
-* **Semantic Loop & Stall Radar**:
-  - Detects semantic action loops beyond exact signature matches (e.g. repeated file slicing, command variations, test retry loops) by computing vector and n-gram similarity across execution windows.
-  - Leverages local `zvec-grep` neural embeddings (`local/potion-code-16m-v2`) when present, with a high-speed zero-dependency statistical n-gram fallback.
-  - Flags loops in the real-time Alert Banner with exact similarity metrics (e.g., "Repetitive exploration loop detected (88% similarity across 3 steps)").
 * **Categorical Tool Spectrum & Skills Tagging**:
   - Segmented distribution bar grouping calls into File Edits, Shell/Terminal, Search/Read, Subagents, and per-server MCP segments.
   - Active Skills tag row displaying live skill and MCP activations (e.g., `graphify`, `archify`, `engram`, `zvec-grep`).

@@ -98,7 +98,25 @@
 
       <!-- KPI Metric Tiles Grid -->
       <section class="grid" aria-label="Session key metrics">
-        <!-- 1. Active Context Window Tile (Antigravity-specific) -->
+        <!-- 1. Agent Health Scorecard Tile -->
+        <div class="tile">
+          <div class="tile-top">
+            <span class="tile-label">Agent Health</span>
+            <span id="badge-health-grade" class="health-grade-badge">Optimal</span>
+          </div>
+          <div class="tile-value mono tabular">
+            <span id="val-health-score">100</span>
+            <span style="font-size: 11px; font-weight: normal; color: var(--muted-foreground);">/ 100</span>
+          </div>
+          <div class="tile-footer">
+            <span id="val-health-sub" class="tabular">Reliable · Clean</span>
+            <div class="micro-bar" style="width: 44px;" title="Agent session health score">
+              <div id="bar-health-fill" class="micro-bar-fill" style="width: 100%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Active Context Window Tile (Antigravity-specific) -->
         <div class="tile">
           <div class="tile-top">
             <span class="tile-label">Context Window</span>
@@ -166,8 +184,8 @@
           </div>
         </div>
 
-        <!-- 5. Antigravity Ecosystem Tile -->
-        <div class="tile tile-span-2">
+        <!-- 6. Antigravity Ecosystem Tile -->
+        <div class="tile">
           <div class="tile-top">
             <span class="tile-label">Ecosystem</span>
             <svg class="icon" aria-hidden="true" style="color: var(--muted-foreground);" viewBox="0 0 24 24">
@@ -179,6 +197,47 @@
           <div id="val-ecosystem" class="tile-value mono tabular" style="font-size: 13.5px;">0 Agents · 0 MCP</div>
           <div class="tile-footer">
             <span id="val-ecosystem-sub" class="tabular">0 Artifacts · 0 Compacted</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Agent Health Scorecard Breakdown -->
+      <section class="health-scorecard-section" aria-label="Agent Health Scorecard">
+        <div class="scorecard-header">
+          <div class="scorecard-title-wrap">
+            <span>Health Scorecard</span>
+            <span id="scorecard-pill" class="health-pill">Optimal (100/100)</span>
+          </div>
+          <span id="scorecard-desc" class="scorecard-desc">Healthy execution</span>
+        </div>
+        <div class="scorecard-pillars">
+          <div class="pillar-card" title="Tool execution success rate and error recovery resilience">
+            <div class="pillar-top">
+              <span class="pillar-name">Reliability</span>
+              <span id="pillar-val-reliability" class="pillar-val mono tabular">100%</span>
+            </div>
+            <div class="pillar-bar"><div id="pillar-bar-reliability" class="pillar-fill" style="width: 100%;"></div></div>
+          </div>
+          <div class="pillar-card" title="Absence of repetitive tool loops or high-similarity cycles">
+            <div class="pillar-top">
+              <span class="pillar-name">Loop Radar</span>
+              <span id="pillar-val-loop" class="pillar-val mono tabular">100%</span>
+            </div>
+            <div class="pillar-bar"><div id="pillar-bar-loop" class="pillar-fill" style="width: 100%;"></div></div>
+          </div>
+          <div class="pillar-card" title="Balanced cognitive distribution across discovery, execution, and verification">
+            <div class="pillar-top">
+              <span class="pillar-name">Phase Balance</span>
+              <span id="pillar-val-phase" class="pillar-val mono tabular">100%</span>
+            </div>
+            <div class="pillar-bar"><div id="pillar-bar-phase" class="pillar-fill" style="width: 100%;"></div></div>
+          </div>
+          <div class="pillar-card" title="Context headroom preservation and avoidance of compaction overflows">
+            <div class="pillar-top">
+              <span class="pillar-name">Context Economy</span>
+              <span id="pillar-val-context" class="pillar-val mono tabular">100%</span>
+            </div>
+            <div class="pillar-bar"><div id="pillar-bar-context" class="pillar-fill" style="width: 100%;"></div></div>
           </div>
         </div>
       </section>
@@ -206,6 +265,19 @@
         <div id="cognitive-phase-bar" class="segmented-bar"></div>
         <div id="cognitive-phase-legend" class="spectrum-legend"></div>
       </section>
+
+      <!-- Error Root Causes Section (visible when errors exist) -->
+      <section id="error-taxonomy-section" class="error-taxonomy-section" style="display: none;" aria-label="Error root cause breakdown">
+        <div class="spectrum-header">
+          <div class="error-taxonomy-heading">
+            <span>Error Root Causes</span>
+            <span id="error-taxonomy-badge" class="error-count-pill tabular mono">0 errors</span>
+          </div>
+          <button id="btn-view-all-errors" class="btn-text-link" type="button" title="Jump to error traces">View in Traces</button>
+        </div>
+        <div id="error-taxonomy-bar" class="segmented-bar"></div>
+        <div id="error-taxonomy-legend" class="error-taxonomy-legend"></div>
+      </section>
     </main>
 
     <!-- TAB 2: TRACES -->
@@ -223,6 +295,9 @@
           <button id="tab-errors" class="tab-btn error-tab" type="button">Errors (<span id="err-count-badge" class="tabular">0</span>)</button>
         </div>
       </div>
+
+      <!-- Error Root-Cause Sub-Filters (visible when Errors tab is active) -->
+      <div id="error-clusters-filter" class="error-clusters-filter" style="display: none;" role="group" aria-label="Filter errors by root cause"></div>
 
       <!-- Traces Search & Expansion Toolbar -->
       <div class="traces-filter-bar">

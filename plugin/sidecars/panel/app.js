@@ -5,6 +5,7 @@
   const $ = (id) => document.getElementById(id);
 
   let currentMode = 'all'; // 'all' | 'tools' | 'errors'
+  let selectedErrorCluster = 'all';
   let traceSearchQuery = '';
   let lastTelemetryData = null;
   let toastTimer = null;
@@ -241,6 +242,170 @@
     ).join('');
   }
 
+  // Render Automated Agent Health Scorecard (Tile + Breakdown section)
+  function renderHealthScorecard(scorecard = {}) {
+    const score = Number.isFinite(scorecard.score) ? scorecard.score : 100;
+    const grade = scorecard.grade || 'Optimal';
+    const color = scorecard.color || '#10b981';
+    const summary = scorecard.summary || 'Healthy execution';
+    const pillars = scorecard.pillars || {
+      reliability: 100,
+      loopRadar: 100,
+      phaseBalance: 100,
+      contextEconomy: 100,
+    };
+
+    // 1. Overview Tile 1
+    const scoreEl = $('val-health-score');
+    const gradeEl = $('badge-health-grade');
+    const subEl = $('val-health-sub');
+    const barEl = $('bar-health-fill');
+
+    if (scoreEl) scoreEl.textContent = score;
+    if (gradeEl) {
+      gradeEl.textContent = grade;
+      gradeEl.className = `health-grade-badge grade-${grade.toLowerCase().replace(/\s+/g, '-')}`;
+    }
+    if (subEl) subEl.textContent = summary;
+    if (barEl) {
+      barEl.style.width = `${Math.min(100, Math.max(0, score))}%`;
+      barEl.style.backgroundColor = color;
+    }
+
+    // 2. Health Scorecard Section Breakdown
+    const pillEl = $('scorecard-pill');
+    const descEl = $('scorecard-desc');
+    if (pillEl) {
+      pillEl.textContent = `${grade} (${score}/100)`;
+      pillEl.className = `health-pill grade-${grade.toLowerCase().replace(/\s+/g, '-')}`;
+    }
+    if (descEl) descEl.textContent = summary;
+
+    const setPillar = (id, val) => {
+      const vEl = $(`pillar-val-${id}`);
+      const bEl = $(`pillar-bar-${id}`);
+      if (vEl) vEl.textContent = `${val}%`;
+      if (bEl) {
+        bEl.style.width = `${Math.min(100, Math.max(0, val))}%`;
+        if (val < 60) bEl.style.backgroundColor = 'var(--destructive)';
+        else if (val < 80) bEl.style.backgroundColor = 'var(--warning)';
+        else bEl.style.backgroundColor = 'var(--primary)';
+      }
+    };
+
+    setPillar('reliability', pillars.reliability ?? 100);
+    setPillar('loop', pillars.loopRadar ?? 100);
+    setPillar('phase', pillars.phaseBalance ?? 100);
+    setPillar('context', pillars.contextEconomy ?? 100);
+  }
+
+  // Render Error Root Causes Section (Overview Tab)
+  function renderErrorTaxonomy(errorTaxonomy = {}) {
+    const sectionEl = $('error-taxonomy-section');
+    const badgeEl = $('error-taxonomy-badge');
+    const barEl = $('error-taxonomy-bar');
+    const legendEl = $('error-taxonomy-legend');
+
+    if (!sectionEl || !barEl || !legendEl) return;
+
+    const clusters = Object.values(errorTaxonomy || {});
+    const totalErrors = clusters.reduce((sum, c) => sum + (c.count || 0), 0);
+
+    if (totalErrors === 0) {
+      sectionEl.style.display = 'none';
+      return;
+    }
+
+    sectionEl.style.display = 'flex';
+    if (badgeEl) {
+      badgeEl.textContent = `${totalErrors} error${totalErrors > 1 ? 's' : ''}`;
+    }
+
+    // Segmented bar
+    barEl.innerHTML = clusters.map(c => {
+      const pct = ((c.count / totalErrors) * 100).toFixed(1);
+      return `<div class="segment" style="width: ${pct}%; background-color: ${c.color};" title="${escapeHtml(c.label)}: ${c.count} (${pct}%)"></div>`;
+    }).join('');
+
+    // Clickable legend items
+    legendEl.innerHTML = clusters.map(c => `
+      <div class="error-legend-item" data-cluster="${escapeHtml(c.id)}" title="${escapeHtml(c.description || c.sample || '')} · Click to view in Traces">
+        <div class="error-legend-dot" style="background-color: ${c.color};"></div>
+        <span class="error-legend-name">${escapeHtml(c.label)}</span>
+        <span class="error-legend-count tabular mono">${c.count}</span>
+      </div>
+    `).join('');
+
+    legendEl.querySelectorAll('.error-legend-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const clusterId = el.getAttribute('data-cluster');
+        switchToTab('pane-traces');
+        setFilterMode('errors', clusterId);
+      });
+    });
+  }
+
+  // Render Error Sub-Filters in Traces Pane
+  function renderErrorClustersFilter(errorTaxonomy = {}) {
+    const filterEl = $('error-clusters-filter');
+    if (!filterEl) return;
+
+    if (currentMode !== 'errors') {
+      filterEl.style.display = 'none';
+      return;
+    }
+
+    const clusters = Object.values(errorTaxonomy || {});
+    if (clusters.length === 0) {
+      filterEl.style.display = 'none';
+      return;
+    }
+
+    filterEl.style.display = 'flex';
+    const totalErrors = clusters.reduce((sum, c) => sum + (c.count || 0), 0);
+
+    let html = `<button class="error-cluster-chip ${selectedErrorCluster === 'all' ? 'active' : ''}" data-cluster="all" type="button">All Errors (${totalErrors})</button>`;
+    for (const c of clusters) {
+      const isActive = selectedErrorCluster === c.id;
+      const borderStyle = isActive ? `border-color: ${c.color}; color: ${c.color};` : '';
+      html += `<button class="error-cluster-chip ${isActive ? 'active' : ''}" data-cluster="${escapeHtml(c.id)}" type="button" style="${borderStyle}">
+        <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:${c.color}; margin-right:3px;"></span>
+        ${escapeHtml(c.label)} (${c.count})
+      </button>`;
+    }
+    filterEl.innerHTML = html;
+
+    filterEl.querySelectorAll('.error-cluster-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedErrorCluster = btn.getAttribute('data-cluster');
+        renderErrorClustersFilter(errorTaxonomy);
+        renderWaterfall();
+      });
+    });
+  }
+
+  function switchToTab(tabId) {
+    document.querySelectorAll('.nav-tab').forEach(t => {
+      const match = t.getAttribute('data-tab') === tabId;
+      t.classList.toggle('active', match);
+      t.setAttribute('aria-selected', match ? 'true' : 'false');
+      t.setAttribute('tabindex', match ? '0' : '-1');
+    });
+    document.querySelectorAll('.tab-pane').forEach(p => {
+      p.classList.toggle('active', p.id === tabId);
+    });
+  }
+
+  function setFilterMode(mode, cluster = 'all') {
+    currentMode = mode;
+    selectedErrorCluster = cluster;
+    $('tab-all')?.classList.toggle('active', mode === 'all');
+    $('tab-tools')?.classList.toggle('active', mode === 'tools');
+    $('tab-errors')?.classList.toggle('active', mode === 'errors');
+    renderErrorClustersFilter(lastTelemetryData?.errorTaxonomy);
+    renderWaterfall();
+  }
+
   // Render vertical waterfall traces preserving expanded node drawer states
   function renderWaterfall() {
     if (!lastTelemetryData) return;
@@ -249,6 +414,9 @@
 
     if (currentMode === 'errors') {
       items = lastTelemetryData.failedSteps || [];
+      if (selectedErrorCluster && selectedErrorCluster !== 'all') {
+        items = items.filter(s => s.errorTaxonomy?.id === selectedErrorCluster);
+      }
     } else if (currentMode === 'tools') {
       items = items.filter(s => s.tools && s.tools.length > 0);
     }
@@ -330,6 +498,15 @@
           `;
         }).join('');
 
+        const errorCauseBlock = s.errorTaxonomy ? `
+          <div class="drawer-section" style="border-left: 2px solid ${s.errorTaxonomy.color}; padding-left: 8px;">
+            <div class="drawer-section-title" style="color: ${s.errorTaxonomy.color};">
+              <span>Root Cause: ${escapeHtml(s.errorTaxonomy.label)}</span>
+            </div>
+            <div style="font-size: 11px; color: var(--foreground);">${escapeHtml(s.errorTaxonomy.summary)}</div>
+          </div>
+        ` : '';
+
         const outputBlock = s.outputSnippet ? `
           <div class="drawer-section output-section">
             <div class="drawer-section-title">
@@ -353,6 +530,7 @@
           <div class="node-drawer">
             ${reasoningBlock}
             ${argsBlocks}
+            ${errorCauseBlock}
             ${outputBlock}
             ${footerMetrics}
           </div>
@@ -400,9 +578,18 @@
         `;
       } else {
         toolHtml = `<span class="node-summary" style="color: var(--secondary-foreground);">${escapeHtml(s.source)} · ${escapeHtml(s.type)}: ${escapeHtml((s.content || '').slice(0, 80))}</span>`;
-        if (s.content) {
+        if (s.content || s.errorTaxonomy) {
+          const causeBlock = s.errorTaxonomy ? `
+            <div class="drawer-section" style="border-left: 2px solid ${s.errorTaxonomy.color}; padding-left: 8px;">
+              <div class="drawer-section-title" style="color: ${s.errorTaxonomy.color};">
+                <span>Root Cause: ${escapeHtml(s.errorTaxonomy.label)}</span>
+              </div>
+              <div style="font-size: 11px; color: var(--foreground);">${escapeHtml(s.errorTaxonomy.summary)}</div>
+            </div>
+          ` : '';
           drawerHtml = `
             <div class="node-drawer">
+              ${causeBlock}
               <div class="drawer-section output-section">
                 <div class="drawer-section-title">Content</div>
                 <pre class="output-preview mono">${escapeHtml(s.content)}</pre>
@@ -421,16 +608,20 @@
         : '';
 
       const categoryPill = `<span class="category-pill category-${s.category || 'system'}">${escapeHtml((s.category || 'step').toUpperCase())}</span>`;
+      const errorTaxonomyBadge = s.errorTaxonomy
+        ? `<span class="error-taxonomy-tag mono" style="color: ${s.errorTaxonomy.color}; background: ${s.errorTaxonomy.color}22; border: 1px solid ${s.errorTaxonomy.color}44;" title="${escapeHtml(s.errorTaxonomy.summary || '')}">${escapeHtml(s.errorTaxonomy.label)}</span>`
+        : '';
 
       return `
         <div class="waterfall-node ${isErr ? 'error' : ''} ${isExpanded ? 'expanded' : ''}" data-step="${s.stepIndex}">
           <div class="waterfall-bullet"></div>
           <div class="node-card">
             <div class="node-header">
-              <div style="display: flex; align-items: center; gap: 5px;">
+              <div style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
                 <span class="node-step-tag tabular mono">#${s.stepIndex}</span>
                 ${categoryPill}
                 ${s.phase ? `<span class="phase-pill phase-${(s.phase || 'synthesis').toLowerCase()}">${escapeHtml(s.phaseLabel || s.phase)}</span>` : ''}
+                ${errorTaxonomyBadge}
               </div>
               <div class="node-timing">
                 ${tokenChip}
@@ -594,23 +785,9 @@ ${fileLines}
         modelBadge.title = `Active Model: ${data.activeModel || 'Gemini'}`;
       }
 
-      // 1. Cache Hits (Overview)
-      const hitRateText = data.cacheHitRate || '0%';
-      const cachedK = formatTokens(data.cacheReadTokens || 0);
-      const savingsText = data.cacheSavings || '$0.0000';
-      if ($('val-cache-rate')) {
-        $('val-cache-rate').textContent = hitRateText;
-      }
-      if ($('val-cache-sub')) {
-        $('val-cache-sub').textContent = `${cachedK} cached`;
-        $('val-cache-sub').title = `${data.cacheReadTokens || 0} tokens from prompt cache · Saved ${savingsText} vs uncached`;
-      }
-      if ($('val-cost')) {
-        $('val-cost').textContent = data.estimatedCost || '$0.0000';
-      }
-      const numericRate = parseFloat(hitRateText) || 0;
-      if ($('bar-cache-fill')) {
-        $('bar-cache-fill').style.width = `${Math.min(100, numericRate)}%`;
+      // 1. Agent Health & Scorecard (Overview)
+      if (data.healthScorecard) {
+        renderHealthScorecard(data.healthScorecard);
       }
 
       // 2. Active Context Window (Overview - Antigravity)
@@ -711,12 +888,17 @@ ${fileLines}
       }
 
       // Telemetry change detection signature
+      const errorCount = data.errorCount || 0;
+      const errorClusterCount = Object.keys(data.errorTaxonomy || {}).length;
+      const healthScore = data.healthScorecard?.score ?? 100;
       const cognitiveSig = `${data.currentPhase || ''}:${data.cognitiveEngine?.engine || ''}:${data.cognitiveEngine?.cachedVectors || 0}`;
-      const newSignature = `${data.conversationId}:${data.totalSteps}:${data.errorCount}:${data.totalTokens}:${data.latestContextTokens || 0}:${data.activeModel || ''}:${data.loopDetected?.repetitions || data.loopDetected?.similarity || 0}:${(data.filesTouched || []).length}:${Object.keys(mcpServers).length}:${activeSkills.length}:${cognitiveSig}`;
+      const newSignature = `${data.conversationId}:${data.totalSteps}:${errorCount}:${data.totalTokens}:${data.latestContextTokens || 0}:${data.activeModel || ''}:${data.loopDetected?.repetitions || data.loopDetected?.similarity || 0}:${(data.filesTouched || []).length}:${Object.keys(mcpServers).length}:${activeSkills.length}:${cognitiveSig}:${healthScore}:${errorClusterCount}`;
       if (force || newSignature !== lastTelemetrySignature) {
         lastTelemetrySignature = newSignature;
         renderToolSpectrum(data.toolCounts || {}, data.mcpServers || {}, data.activeSkills || []);
         renderCognitiveSpectrum(data.phaseDistribution || {}, data.currentPhase, data.currentPhaseLabel, data.cognitiveEngine);
+        renderErrorTaxonomy(data.errorTaxonomy || {});
+        renderErrorClustersFilter(data.errorTaxonomy || {});
         renderWaterfall();
         renderFiles(data.filesTouched || []);
       }
@@ -842,27 +1024,20 @@ ${fileLines}
 
     // Filter tabs inside Traces
     $('tab-all').addEventListener('click', () => {
-      currentMode = 'all';
-      $('tab-all').classList.add('active');
-      $('tab-tools')?.classList.remove('active');
-      $('tab-errors').classList.remove('active');
-      renderWaterfall();
+      setFilterMode('all');
     });
 
     $('tab-tools')?.addEventListener('click', () => {
-      currentMode = 'tools';
-      $('tab-tools').classList.add('active');
-      $('tab-all').classList.remove('active');
-      $('tab-errors').classList.remove('active');
-      renderWaterfall();
+      setFilterMode('tools');
     });
 
     $('tab-errors').addEventListener('click', () => {
-      currentMode = 'errors';
-      $('tab-errors').classList.add('active');
-      $('tab-all').classList.remove('active');
-      $('tab-tools')?.classList.remove('active');
-      renderWaterfall();
+      setFilterMode('errors');
+    });
+
+    $('btn-view-all-errors')?.addEventListener('click', () => {
+      switchToTab('pane-traces');
+      setFilterMode('errors', 'all');
     });
 
     // Traces Search Input

@@ -125,6 +125,308 @@ export function detectRepetitionLoop(recentToolCalls = [], threshold = 3) {
 }
 
 /**
+ * Standardized taxonomy categories for classifying agent tool and execution errors.
+ */
+export const ERROR_CATEGORIES = {
+  PATH_NOT_FOUND: {
+    id: 'path_not_found',
+    label: 'File / Path Not Found',
+    color: '#f43f5e',
+    description: 'Target file or directory does not exist on disk',
+  },
+  EDIT_CONFLICT: {
+    id: 'edit_conflict',
+    label: 'Edit Target Mismatch',
+    color: '#f59e0b',
+    description: 'Target text chunk could not be matched for replacement',
+  },
+  COMMAND_FAILED: {
+    id: 'command_failed',
+    label: 'Command Execution Failure',
+    color: '#ef4444',
+    description: 'Subprocess or terminal script exited with a non-zero exit code',
+  },
+  MCP_ERROR: {
+    id: 'mcp_error',
+    label: 'MCP Protocol Error',
+    color: '#a855f7',
+    description: 'External MCP server returned an exception or unknown project context',
+  },
+  VALIDATION: {
+    id: 'validation',
+    label: 'Tool Schema Error',
+    color: '#3b82f6',
+    description: 'Tool invocation failed due to missing or invalid argument schema',
+  },
+  PERMISSION: {
+    id: 'permission',
+    label: 'Permission Denied',
+    color: '#e11d48',
+    description: 'Operation rejected by workspace boundaries or OS access controls',
+  },
+  TIMEOUT: {
+    id: 'timeout',
+    label: 'Timeout / Aborted',
+    color: '#64748b',
+    description: 'Process exceeded execution deadline or was cancelled by user',
+  },
+  RUNTIME: {
+    id: 'runtime',
+    label: 'General Runtime',
+    color: '#8b5cf6',
+    description: 'Uncategorized runtime exception or internal tool execution failure',
+  },
+};
+
+/**
+ * Classifies an error message into a standardized root-cause taxonomy category.
+ *
+ * @param {string} rawMessage
+ * @param {string} [toolName]
+ * @returns {{ id: string, label: string, color: string, summary: string, raw: string }}
+ */
+export function classifyError(rawMessage = '', toolName = '') {
+  const str = String(rawMessage || '').trim();
+  const tool = String(toolName || '').toLowerCase();
+
+  // 1. Path not found
+  if (
+    /GetFileAttributesEx|cannot find the path|ENOENT|no such file|not found|does not exist|path specified/i.test(str) &&
+    !/target content not found/i.test(str) &&
+    !/unknown_project/i.test(str)
+  ) {
+    let summary = 'File or directory path not found';
+    const pathMatch = str.match(/GetFileAttributesEx\s+(.+?)(?::\s*The system|:\s*[A-Z]|$)/i) ||
+                      str.match(/(?:open|read|stat)\s*['"`]([^'"`]+)['"`]/i) ||
+                      str.match(/`?file:\/\/\/([^`\n\r]+)`?/i) ||
+                      str.match(/(?:failed to read file|path specified)[^:]*:\s*([^\n\r]+)/i);
+    if (pathMatch && pathMatch[1]) {
+      const cleanPath = pathMatch[1].trim().replace(/^["']|["']$/g, '');
+      const base = cleanPath.split(/[/\\]/).pop();
+      summary = base ? `File not found: ${base}` : `File not found: ${cleanPath}`;
+    }
+    return {
+      id: ERROR_CATEGORIES.PATH_NOT_FOUND.id,
+      label: ERROR_CATEGORIES.PATH_NOT_FOUND.label,
+      color: ERROR_CATEGORIES.PATH_NOT_FOUND.color,
+      summary,
+      raw: str.slice(0, 300),
+    };
+  }
+
+  // 2. Edit conflict / replacement mismatch
+  if (/target content not found|Could not successfully apply any edits|TargetContent|chunk \d+/i.test(str)) {
+    return {
+      id: ERROR_CATEGORIES.EDIT_CONFLICT.id,
+      label: ERROR_CATEGORIES.EDIT_CONFLICT.label,
+      color: ERROR_CATEGORIES.EDIT_CONFLICT.color,
+      summary: 'Edit chunk mismatch: target content not found in file',
+      raw: str.slice(0, 300),
+    };
+  }
+
+  // 3. MCP Protocol error
+  if (/unknown_project|error_code|Encountered error in tool execution|cortex tool.*call_mcp|MCP error/i.test(str) || tool.includes('mcp')) {
+    let summary = 'MCP server returned protocol error';
+    const msgMatch = str.match(/"message"\s*:\s*"([^"]+)"/);
+    if (msgMatch && msgMatch[1]) {
+      summary = msgMatch[1];
+    } else if (str.includes('unknown_project')) {
+      summary = 'Engram project context unrecognized';
+    }
+    return {
+      id: ERROR_CATEGORIES.MCP_ERROR.id,
+      label: ERROR_CATEGORIES.MCP_ERROR.label,
+      color: ERROR_CATEGORIES.MCP_ERROR.color,
+      summary,
+      raw: str.slice(0, 300),
+    };
+  }
+
+  // 4. Permission / Sandbox denial
+  if (/declaring permissions|permission denied|EACCES|access is denied|forbidden/i.test(str)) {
+    return {
+      id: ERROR_CATEGORIES.PERMISSION.id,
+      label: ERROR_CATEGORIES.PERMISSION.label,
+      color: ERROR_CATEGORIES.PERMISSION.color,
+      summary: 'Operation denied by workspace permission policy',
+      raw: str.slice(0, 300),
+    };
+  }
+
+  // 5. Validation / invalid tool call args
+  if (/invalid tool call|invalid_args|missing required|validation error|parameter error/i.test(str)) {
+    return {
+      id: ERROR_CATEGORIES.VALIDATION.id,
+      label: ERROR_CATEGORIES.VALIDATION.label,
+      color: ERROR_CATEGORIES.VALIDATION.color,
+      summary: 'Invalid tool arguments or malformed schema parameters',
+      raw: str.slice(0, 300),
+    };
+  }
+
+  // 6. Timeout / Interrupted
+  if (/timed out|timeout|cancelled|aborted|ETIMEDOUT/i.test(str)) {
+    return {
+      id: ERROR_CATEGORIES.TIMEOUT.id,
+      label: ERROR_CATEGORIES.TIMEOUT.label,
+      color: ERROR_CATEGORIES.TIMEOUT.color,
+      summary: 'Subprocess timed out or execution was aborted',
+      raw: str.slice(0, 300),
+    };
+  }
+
+  // 7. Command failed (exit status / code)
+  if (/exit status \d+|exit code \d+|Process terminated with exit status|command failed/i.test(str) || tool === 'run_command') {
+    let exitCode = '1';
+    const codeMatch = str.match(/exit status (\d+)/i) || str.match(/exit code (\d+)/i);
+    if (codeMatch && codeMatch[1]) exitCode = codeMatch[1];
+    return {
+      id: ERROR_CATEGORIES.COMMAND_FAILED.id,
+      label: ERROR_CATEGORIES.COMMAND_FAILED.label,
+      color: ERROR_CATEGORIES.COMMAND_FAILED.color,
+      summary: `Process terminated with exit status ${exitCode}`,
+      raw: str.slice(0, 300),
+    };
+  }
+
+  // Fallback: General Runtime
+  const firstLine = str.split(/\r?\n/)[0] || 'Uncategorized runtime error';
+  return {
+    id: ERROR_CATEGORIES.RUNTIME.id,
+    label: ERROR_CATEGORIES.RUNTIME.label,
+    color: ERROR_CATEGORIES.RUNTIME.color,
+    summary: firstLine.length > 70 ? firstLine.slice(0, 67) + '...' : firstLine,
+    raw: str.slice(0, 300),
+  };
+}
+
+/**
+ * Computes an automated agent efficiency and health scorecard (0 - 100).
+ * Evaluates 4 core pillars:
+ * 1. Tool Reliability (30%): tool success rate with error recovery credit
+ * 2. Loop Radar (25%): absence of consecutive or semantic repetition loops
+ * 3. Phase Balance (25%): harmonious progression across discovery, execution, and verification
+ * 4. Context Economy (20%): headroom maintenance and avoidance of compaction overflows
+ *
+ * @param {object} params
+ * @returns {{ score: number, grade: string, color: string, summary: string, deductions: string[], pillars: object }}
+ */
+export function calculateAgentHealth({
+  totalSteps = 0,
+  toolCounts = {},
+  failedSteps = [],
+  loopDetected = null,
+  semanticLoop = null,
+  cognition = {},
+  compactionsCount = 0,
+  latestContextTokens = 0,
+  contextLimit = 1000000,
+} = {}) {
+  // 1. Tool Reliability Pillar (30%)
+  const totalCalls = Object.values(toolCounts || {}).reduce((sum, c) => sum + c, 0);
+  const totalErrors = Array.isArray(failedSteps) ? failedSteps.length : 0;
+  let reliability = 100;
+  if (totalCalls > 0) {
+    const rawRate = Math.max(0, ((totalCalls - totalErrors) / totalCalls) * 100);
+    const recoveredCount = Math.max(0, Math.min(totalErrors, totalCalls - totalErrors));
+    const recoveryBonus = totalErrors > 0 ? (recoveredCount / totalErrors) * 10 : 0;
+    reliability = Math.min(100, Math.max(0, rawRate + recoveryBonus));
+  }
+
+  // 2. Loop Radar Pillar (25%)
+  let loopScore = 100;
+  if (loopDetected) {
+    const reps = Number(loopDetected.repetitions) || 3;
+    loopScore = Math.max(0, 100 - (reps * 12));
+  } else if (semanticLoop) {
+    const sim = Number(semanticLoop.similarity) || 0.8;
+    loopScore = Math.max(20, Math.round(100 - (sim * 60)));
+  }
+
+  // 3. Phase Balance Pillar (25%)
+  let phaseBalance = 100;
+  const dist = cognition?.phaseDistribution || {};
+  const execPct = Number(dist.execution) || 0;
+  const verifPct = Number(dist.verification) || 0;
+  const explorPct = Number(dist.exploration) || 0;
+  const deductions = [];
+
+  if (execPct >= 15 && verifPct === 0) {
+    phaseBalance -= 30;
+    deductions.push('Unverified modifications: 0% verification phase');
+  }
+  if (explorPct >= 80 && totalSteps > 20 && execPct === 0) {
+    phaseBalance -= 25;
+    deductions.push('High exploration churn without execution');
+  }
+  phaseBalance = Math.max(20, phaseBalance);
+
+  // 4. Context Economy Pillar (20%)
+  let contextEconomy = 100;
+  if (compactionsCount > 0) {
+    const compPenalty = Math.min(45, compactionsCount * 15);
+    contextEconomy -= compPenalty;
+    deductions.push(`${compactionsCount} context compaction${compactionsCount > 1 ? 's' : ''}`);
+  }
+  const loadPct = contextLimit > 0 ? (latestContextTokens / contextLimit) * 100 : 0;
+  if (loadPct >= 85) {
+    contextEconomy -= 25;
+    deductions.push('Context window near saturation (>85%)');
+  } else if (loadPct >= 70) {
+    contextEconomy -= 10;
+  }
+  contextEconomy = Math.max(10, contextEconomy);
+
+  // Overall Weighted Score
+  const overall = Math.round(
+    (reliability * 0.30) +
+    (loopScore * 0.25) +
+    (phaseBalance * 0.25) +
+    (contextEconomy * 0.20)
+  );
+
+  const score = Math.min(100, Math.max(0, overall));
+
+  let grade = 'Optimal';
+  let color = '#10b981'; // Emerald
+  if (score < 60) {
+    grade = 'Degraded';
+    color = '#f43f5e'; // Rose
+  } else if (score < 75) {
+    grade = 'Attention';
+    color = '#f59e0b'; // Amber
+  } else if (score < 90) {
+    grade = 'Healthy';
+    color = '#3b82f6'; // Blue
+  }
+
+  let summary = 'Agent execution is clean and responsive';
+  if (score < 60) {
+    summary = 'Degraded: multiple errors, loops, or context exhaustion';
+  } else if (deductions.length > 0) {
+    summary = deductions[0];
+  } else if (score < 90) {
+    summary = 'Healthy execution with minor friction';
+  }
+
+  return {
+    score,
+    grade,
+    color,
+    summary,
+    deductions,
+    pillars: {
+      reliability: Math.round(reliability),
+      toolReliability: Math.round(reliability),
+      loopRadar: Math.round(loopScore),
+      phaseBalance: Math.round(phaseBalance),
+      contextEconomy: Math.round(contextEconomy),
+    },
+  };
+}
+
+/**
  * Cleans string argument values by stripping outer quotes and parsing JSON if applicable.
  */
 function cleanArgValue(val) {
@@ -413,6 +715,13 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
       category = 'assistant';
     }
 
+    let errorTaxonomy = null;
+    if (isError || pairedError) {
+      const errStr = outputSnippet || (typeof step.content === 'string' ? step.content : '') || (typeof step.error === 'string' ? step.error : '');
+      const toolName = toolsInStep[0] ? toolsInStep[0].name : (rawSteps[i - 1]?.tool_calls?.[0]?.name || '');
+      errorTaxonomy = classifyError(errStr, toolName);
+    }
+
     const stepRecord = {
       stepIndex: step.step_index ?? i,
       source: step.source || 'UNKNOWN',
@@ -430,6 +739,7 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
       userPrompt,
       outputSnippet,
       category,
+      errorTaxonomy,
     };
 
     parsedSteps.push(stepRecord);
@@ -472,6 +782,40 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
   const contextLimit = 1000000;
   const contextLoadPercent = `${Math.min(100, Math.max(0, (latestContextTokens / contextLimit) * 100)).toFixed(1)}%`;
 
+  // Aggregate errors into root-cause taxonomy clusters
+  const errorTaxonomy = {};
+  for (const failed of failedSteps) {
+    const cat = failed.errorTaxonomy || classifyError(failed.outputSnippet || failed.content || failed.error, failed.tools?.[0]?.name);
+    failed.errorTaxonomy = cat;
+
+    if (!errorTaxonomy[cat.id]) {
+      errorTaxonomy[cat.id] = {
+        id: cat.id,
+        label: cat.label,
+        color: cat.color,
+        description: cat.description,
+        count: 0,
+        stepIndices: [],
+        sample: cat.summary,
+      };
+    }
+    errorTaxonomy[cat.id].count++;
+    errorTaxonomy[cat.id].stepIndices.push(failed.stepIndex);
+  }
+
+  // Calculate automated efficiency & health scorecard
+  const healthScorecard = calculateAgentHealth({
+    totalSteps: parsedSteps.length,
+    toolCounts,
+    failedSteps,
+    loopDetected: loopDetected || cognition.semanticLoop,
+    semanticLoop: cognition.semanticLoop,
+    cognition,
+    compactionsCount,
+    latestContextTokens,
+    contextLimit,
+  });
+
   return {
     status: 'active',
     conversationId,
@@ -495,6 +839,8 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
     activeModel,
     avgStepDuration,
     toolSuccessRate,
+    healthScorecard,
+    errorTaxonomy,
     subagentCalls,
     mcpCalls,
     mcpServers,

@@ -1328,3 +1328,274 @@ body {
   border: 1px solid rgba(244, 63, 94, 0.35);
 }
 
+/* Health Scorecard & Grade Badges */
+.health-grade-badge {
+  font-size: 8.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  line-height: 1.2;
+}
+
+.health-grade-badge.grade-optimal,
+.health-pill.grade-optimal {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.health-grade-badge.grade-healthy,
+.health-pill.grade-healthy {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+
+.health-grade-badge.grade-attention,
+.health-pill.grade-attention {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.health-grade-badge.grade-degraded,
+.health-pill.grade-degraded {
+  background: rgba(244, 63, 94, 0.15);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+}
+
+/* Agent Health Scorecard Section */
+.health-scorecard-section {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scorecard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scorecard-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.health-pill {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.scorecard-desc {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scorecard-pillars {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+@media (max-width: 380px) {
+  .scorecard-pillars {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.pillar-card {
+  background: var(--secondary);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pillar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9px;
+}
+
+.pillar-name {
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+
+.pillar-val {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.pillar-bar {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 1.5px;
+  overflow: hidden;
+}
+
+.pillar-fill {
+  height: 100%;
+  border-radius: 1.5px;
+  background: var(--primary);
+  transition: width 0.3s ease;
+}
+
+/* Error Taxonomy Section */
+.error-taxonomy-section {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.error-taxonomy-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.error-count-pill {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(244, 63, 94, 0.15);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+}
+
+.btn-text-link {
+  background: transparent;
+  border: none;
+  color: var(--primary);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: opacity 0.15s ease;
+}
+
+.btn-text-link:hover {
+  text-decoration: underline;
+  opacity: 0.9;
+}
+
+.error-taxonomy-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 2px;
+}
+
+.error-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 3px;
+  transition: background-color 0.15s ease;
+}
+
+.error-legend-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.error-legend-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.error-legend-name {
+  color: var(--muted-foreground);
+}
+
+.error-legend-count {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+/* Error Clusters Filter in Traces Pane */
+.error-clusters-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px 6px 8px;
+  background: rgba(244, 63, 94, 0.06);
+  border-bottom: 1px solid rgba(244, 63, 94, 0.15);
+}
+
+.error-cluster-chip {
+  background: var(--secondary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--muted-foreground);
+  font-size: 9.5px;
+  padding: 2px 7px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.error-cluster-chip:hover {
+  color: var(--foreground);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.error-cluster-chip.active {
+  background: rgba(244, 63, 94, 0.2);
+  color: #fb7185;
+  border-color: rgba(244, 63, 94, 0.4);
+  font-weight: 600;
+}
+
+.error-taxonomy-tag {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+}
+

@@ -93,6 +93,29 @@ Fetches real-time token metrics, latency, step history, and error logs for a ses
   "activeModel": "Gemini 2.5 Pro",
   "avgStepDuration": "2.1s",
   "toolSuccessRate": "98.5%",
+  "healthScorecard": {
+    "score": 94,
+    "grade": "Optimal",
+    "color": "#10b981",
+    "summary": "Agent execution is clean and responsive",
+    "deductions": [],
+    "pillars": {
+      "reliability": 98,
+      "loopRadar": 100,
+      "phaseBalance": 90,
+      "contextEconomy": 88
+    }
+  },
+  "errorTaxonomy": {
+    "command_failed": {
+      "id": "command_failed",
+      "label": "Command Execution Failure",
+      "color": "#ef4444",
+      "count": 1,
+      "stepIndices": [3],
+      "sample": "Process terminated with exit status 1"
+    }
+  },
   "subagentCalls": 1,
   "mcpCalls": 4,
   "mcpServers": {

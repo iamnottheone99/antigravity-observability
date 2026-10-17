@@ -2,6 +2,29 @@
 
 All notable changes to the Antigravity Observability Companion will be documented in this file.
 
+## [1.4.0] - 2026-10-17
+
+### Added
+- **Automated Agent Efficiency & Health Scorecard**: Implemented a 0–100 composite session evaluation score evaluating agent execution cleanliness and stability across 4 weighted pillars:
+  - **Tool Reliability (30%)**: Tool success rate combined with error recovery bonus credit.
+  - **Loop Radar (25%)**: Detection of consecutive repetition loops and semantic action cycles.
+  - **Phase Balance (25%)**: Proportional progress across exploration, execution, and verification, penalizing unverified changes and churn.
+  - **Context Economy (20%)**: Monitoring compaction frequency and context window headroom saturation.
+  - Diagnostic grade classifications: `Optimal` ($\ge 90$), `Healthy` (75–89), `Attention` (60–74), and `Degraded` ($< 60$).
+- **Error Taxonomy & Root-Cause Breakdown**: Standardized classification of tool and execution errors into 8 distinct root-cause clusters:
+  - `path_not_found`: Target file or directory does not exist on disk.
+  - `edit_conflict`: Target text chunk could not be matched for replacement.
+  - `command_failed`: Subprocess or terminal script terminated with non-zero exit status.
+  - `mcp_error`: External MCP server returned protocol error or unrecognized context.
+  - `validation`: Tool invocation rejected due to invalid schema arguments.
+  - `permission`: Operation blocked by workspace boundaries or OS access controls.
+  - `timeout`: Subprocess deadline exceeded or operation aborted.
+  - `runtime`: General uncategorized runtime exceptions.
+- **Overview Root Causes Distribution Bar**: Color-coded segmented distribution bar and interactive legend in the Overview tab.
+- **Interactive Error Drill-Down**: Clicking an error cluster pill or category legend in Overview instantly navigates to the Traces tab filtered to that specific root cause.
+- **Traces Error Cluster Filters**: Added `#error-clusters-filter` sub-filter chips container in the Traces tab for rapid one-click root-cause filtering.
+- **Per-Step Root-Cause Badges & Diagnostics**: Integrated color-coded root-cause badges and formatted error cards in trace cards and detail drawers.
+
 ## [1.3.0] - 2026-10-14
 
 ### Added

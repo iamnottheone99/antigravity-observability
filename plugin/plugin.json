@@ -1,6 +1,6 @@
 {
   "name": "agent-observability",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Live in-IDE observability dashboard tracking tokens, tool executions, and step latency in real time.",
   "logo": "assets/logo.svg"
 }
