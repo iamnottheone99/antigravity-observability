@@ -15,7 +15,7 @@ Returns runtime metadata and health diagnostics.
 ```json
 {
   "status": "ok",
-  "version": "1.2.1",
+  "version": "1.4.0",
   "node": "v22.5.0",
   "platform": "win32 10.0.26100",
   "uptimeSeconds": 142,
@@ -27,7 +27,7 @@ Returns runtime metadata and health diagnostics.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `status` | `string` | Always `"ok"` when running. |
-| `version` | `string` | Sidecar semantic version (e.g. `"1.2.1"`). |
+| `version` | `string` | Sidecar semantic version (e.g. `"1.4.0"`). |
 | `node` | `string` | Node.js runtime version. |
 | `platform` | `string` | Host operating system and kernel release. |
 | `uptimeSeconds` | `number` | Seconds elapsed since sidecar process boot. |

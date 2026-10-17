@@ -1,1 +1,1 @@
-{"0": "Telemetry & Analytics Engine", "1": "Auxiliary Panel UI Logic", "2": "Sidecar Runtime & SQLite Backend", "3": "Root Package & Engines Config", "4": "Observability Metadata & Keywords", "5": "Sidecar Package Configuration", "6": "Plugin Installation & Distribution", "7": "System Health & Diagnostics"}
+{"0": "package.json", "1": "test.mjs", "2": "app.js", "3": "classifier.mjs", "4": "compilerOptions", "5": "main.mjs", "6": "panel/package.json", "7": "install.mjs", "8": "API /api/status"}

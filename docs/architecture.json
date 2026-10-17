@@ -14,38 +14,40 @@
       },
       {
         "id": "engine-analytics",
-        "label": "Analytics Engine",
-        "focus": ["sidecar", "engine"],
-        "note": "Pure telemetry module calculates token pricing, cache rates, and loop detection."
+        "label": "Analytics & Cognitive Engines",
+        "focus": ["sidecar", "engine", "classifier"],
+        "note": "Pure telemetry module calculates health scorecards, error taxonomy, and cognitive phases."
       }
     ]
   },
   "components": [
     { "id": "agent", "type": "backend", "label": "Antigravity Agent", "sublabel": "Execution Loop", "pos": [60, 270], "size": [140, 60] },
-    { "id": "transcript", "type": "database", "label": "transcript.jsonl", "sublabel": "Token & Tool Logs", "pos": [290, 140], "size": [150, 60] },
-    { "id": "db", "type": "database", "label": "summaries.db", "sublabel": "SQLite Chat Titles", "pos": [290, 400], "size": [150, 60] },
-    { "id": "sidecar", "type": "backend", "label": "Sidecar Backend", "sublabel": "main.mjs (Node 20+)", "pos": [530, 270], "size": [150, 60] },
-    { "id": "engine", "type": "backend", "label": "Telemetry Engine", "sublabel": "telemetry.mjs (Pure)", "pos": [530, 440], "size": [150, 60] },
-    { "id": "bridge", "type": "cloud", "label": "Preload Bridge", "sublabel": "window.sidecar", "pos": [770, 270], "size": [140, 60] },
-    { "id": "ui", "type": "frontend", "label": "Auxiliary Side Pane", "sublabel": "HTML / app.js (4 Tabs)", "pos": [1000, 270], "size": [150, 60] }
+    { "id": "transcript", "type": "database", "label": "transcript.jsonl", "sublabel": "Token & Tool Logs", "pos": [280, 140], "size": [150, 60] },
+    { "id": "db", "type": "database", "label": "summaries.db", "sublabel": "SQLite Chat Titles", "pos": [280, 400], "size": [150, 60] },
+    { "id": "classifier", "type": "cloud", "label": "Cognitive Radar", "sublabel": "classifier.mjs (zvec / n-gram)", "pos": [510, 120], "size": [160, 60] },
+    { "id": "sidecar", "type": "backend", "label": "Sidecar Backend", "sublabel": "main.mjs (Node 20+)", "pos": [510, 270], "size": [160, 60] },
+    { "id": "engine", "type": "backend", "label": "Telemetry & Health", "sublabel": "telemetry.mjs (Pure Node)", "pos": [510, 420], "size": [160, 60] },
+    { "id": "bridge", "type": "cloud", "label": "Preload Bridge", "sublabel": "window.sidecar", "pos": [760, 270], "size": [140, 60] },
+    { "id": "ui", "type": "frontend", "label": "Auxiliary Side Pane", "sublabel": "HTML / app.js (4 Tabs)", "pos": [980, 270], "size": [150, 60] }
   ],
   "boundaries": [
     { "kind": "region", "label": "Antigravity IDE Core", "wraps": ["agent", "transcript", "db"] },
-    { "kind": "security-group", "label": "Observability Sidecar Plugin", "wraps": ["sidecar", "engine"] },
+    { "kind": "security-group", "label": "Observability Sidecar Plugin", "wraps": ["classifier", "sidecar", "engine"] },
     { "kind": "region", "label": "Auxiliary Side Pane UI", "wraps": ["bridge", "ui"] }
   ],
   "connections": [
     { "id": "agent-log", "from": "agent", "to": "transcript", "label": "stream steps", "fromSide": "top", "toSide": "left" },
     { "id": "agent-db", "from": "agent", "to": "db", "label": "sync titles", "fromSide": "bottom", "toSide": "left" },
-    { "id": "read-log", "from": "transcript", "to": "sidecar", "label": "read jsonl", "fromSide": "right", "toSide": "top" },
-    { "id": "read-db", "from": "db", "to": "sidecar", "label": "query titles", "fromSide": "top", "toSide": "left" },
-    { "id": "calc-metrics", "from": "sidecar", "to": "engine", "label": "analyze", "fromSide": "bottom", "toSide": "top", "labelAt": [605, 344] },
+    { "id": "read-log", "from": "transcript", "to": "sidecar", "label": "read jsonl", "fromSide": "right", "toSide": "left" },
+    { "id": "read-db", "from": "db", "to": "sidecar", "label": "query titles", "fromSide": "right", "toSide": "left" },
+    { "id": "classify-stream", "from": "sidecar", "to": "classifier", "label": "phases & loops", "fromSide": "top", "toSide": "bottom" },
+    { "id": "calc-metrics", "from": "sidecar", "to": "engine", "label": "health & taxonomy", "fromSide": "bottom", "toSide": "top", "labelAt": [590, 354] },
     { "id": "ipc-stream", "from": "sidecar", "to": "bridge", "label": "HTTP IPC", "variant": "emphasis" },
     { "id": "ui-poll", "from": "bridge", "to": "ui", "label": "live trace", "variant": "emphasis" }
   ],
   "cards": [
     { "dot": "cyan", "title": "Telemetry Pipeline", "items": ["Agent appends token metrics and tool runs to transcript.jsonl", "Sidecar polls every 2.5s with zero latency on generation loop"] },
-    { "dot": "emerald", "title": "Engine & Resilience", "items": ["Dynamic SQLite loader queries summaries.db with directory scan fallback", "Pure telemetry engine calculates costs, cache hit rate, and loops"] },
-    { "dot": "amber", "title": "Interactive Controls", "items": ["4-tab panel displays Overview KPIs, Waterfall Traces, Files, and Steer", "Action chips and freeform prompts dispatch steering back to agent"] }
+    { "dot": "emerald", "title": "Health & Cognitive Engines", "items": ["Health scorecard evaluates reliability, loops, phase balance, context economy", "Classifier detects semantic loops and 5 cognitive phases using zvec-grep or n-grams"] },
+    { "dot": "amber", "title": "Error Taxonomy & Steering", "items": ["Classifies errors into 8 root-cause clusters with drill-down filtering", "Action chips and prompt injector steer agent directly from side panel"] }
   ]
 }

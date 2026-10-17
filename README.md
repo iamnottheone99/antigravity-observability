@@ -82,13 +82,15 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
 ```mermaid
 flowchart LR
     subgraph AntigravityEngine["Antigravity Engine"]
-        Agent["Agent Execution Loop"] -->|Streams| Transcript["transcript.jsonl (tokens, tools)"]
+        Agent["Agent Execution Loop"] -->|Streams| Transcript["transcript.jsonl (tokens, tools, errors)"]
         Agent -->|Updates| DB["conversation_summaries.db (titles)"]
     end
 
-    subgraph SidecarBackend["Sidecar Backend"]
-        Backend["main.mjs + telemetry.mjs"] -.->|Reads| Transcript
+    subgraph SidecarBackend["Observability Sidecar Backend"]
+        Backend["main.mjs (HTTP Server & Cache)"] -.->|Reads| Transcript
         Backend -.->|Dynamic SQLite / Scan| DB
+        Backend -->|Phases & Loops| Classifier["classifier.mjs (zvec / n-gram)"]
+        Backend -->|Health & Taxonomy| Engine["telemetry.mjs (Scorecard & Errors)"]
     end
 
     subgraph AuxPane["Auxiliary Side Pane UI"]
