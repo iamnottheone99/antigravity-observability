@@ -77,6 +77,11 @@ runTest('sidecars package.json defines ES module and matches version', () => {
   assert.equal(data.version, '1.4.0');
 });
 
+runTest('sidecar main.mjs status route matches version 1.4.0', () => {
+  const code = readFileSync(join(PLUGIN, 'sidecars/panel/main.mjs'), 'utf8');
+  assert.ok(code.includes("version: '1.4.0'"), 'main.mjs status version is not 1.4.0');
+});
+
 runTest('root package.json is valid and declares engines', () => {
   const data = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   assert.equal(data.name, 'antigravity-observability');
@@ -213,6 +218,10 @@ runTest('parseTranscript handles empty or malformed input safely', () => {
   assert.equal(res.errorCount, 0);
   assert.equal(res.currentPhase, 'SYNTHESIS');
   assert.deepEqual(res.filesTouched, []);
+  assert.ok(res.healthScorecard, 'Missing healthScorecard in empty session fallback');
+  assert.equal(res.healthScorecard.score, 100);
+  assert.ok(res.errorTaxonomy, 'Missing errorTaxonomy in empty session fallback');
+  assert.deepEqual(res.errorTaxonomy, {});
 });
 
 runTest('parseTranscript aggregates token metrics, steps, latencies, and touched files', () => {
@@ -370,6 +379,60 @@ runTest('parseTranscript detects model settings changes, compactions, and subage
   assert.equal(report.latestContextTokens, 5000);
   assert.equal(report.contextLoadPercent, '0.5%');
   assert.equal(report.cacheSavings, '$0.0004');
+});
+
+runTest('parseTranscript ignores CONTEXT_SUMMARY mentions in assistant turns', () => {
+  const log = [
+    JSON.stringify({
+      step_index: 0,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      content: 'Here is a discussion mentioning <CONTEXT_SUMMARY> in normal text.',
+    }),
+  ].join('\n');
+  const report = parseTranscript(log, { conversationId: 'c-compaction' });
+  assert.equal(report.compactionsCount, 0);
+});
+
+runTest('parseTranscript recognizes modern Antigravity 2.0 tool calls with Path argument', () => {
+  const log = [
+    JSON.stringify({
+      step_index: 0,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      tool_calls: [
+        {
+          name: 'read_file',
+          args: { Path: 'c:/project/index.js', StartLine: 10, EndLine: 50 },
+        },
+        {
+          name: 'edit_file',
+          args: { Path: 'c:/project/index.js', Target: 'foo', Replacement: 'bar' },
+        },
+        {
+          name: 'write_file',
+          args: { Path: 'c:/brain/spec.md', Content: '# Spec' },
+        },
+      ],
+    }),
+  ].join('\n');
+
+  const report = parseTranscript(log, { conversationId: 'c-modern-tools' });
+  assert.equal(report.filesTouched.length, 2);
+  assert.ok(report.filesTouched.includes('c:/project/index.js'));
+  assert.ok(report.filesTouched.includes('c:/brain/spec.md'));
+  assert.equal(report.artifactsCount, 1);
+  assert.equal(report.toolCounts['read_file'], 1);
+  assert.equal(report.toolCounts['edit_file'], 1);
+  assert.equal(report.toolCounts['write_file'], 1);
+
+  const step = report.recentSteps[0];
+  assert.equal(step.tools[0].primaryArg, 'c:/project/index.js:10-50');
+  assert.equal(step.tools[0].category, 'read');
+  assert.equal(step.tools[1].primaryArg, 'Edit c:/project/index.js');
+  assert.equal(step.tools[1].category, 'file');
+  assert.equal(step.tools[2].primaryArg, 'Create c:/brain/spec.md');
+  assert.equal(step.tools[2].category, 'file');
 });
 
 runTest('classifyError categorizes all 8 error taxonomy categories accurately', () => {
@@ -564,11 +627,26 @@ runTest('classifyStepPhase categorizes each cognitive phase accurately', () => {
   };
   assert.equal(classifyStepPhase(exploreStep).phase, COGNITIVE_PHASES.EXPLORATION);
 
+  const readFileStep = {
+    tools: [{ name: 'read_file', primaryArg: 'src/main.js' }],
+  };
+  assert.equal(classifyStepPhase(readFileStep).phase, COGNITIVE_PHASES.EXPLORATION);
+
   // Execution
   const editStep = {
     tools: [{ name: 'replace_file_content', primaryArg: 'src/main.js' }],
   };
   assert.equal(classifyStepPhase(editStep).phase, COGNITIVE_PHASES.EXECUTION);
+
+  const editFileStep = {
+    tools: [{ name: 'edit_file', primaryArg: 'Edit src/main.js' }],
+  };
+  assert.equal(classifyStepPhase(editFileStep).phase, COGNITIVE_PHASES.EXECUTION);
+
+  const writeFileStep = {
+    tools: [{ name: 'write_file', primaryArg: 'Create src/main.js' }],
+  };
+  assert.equal(classifyStepPhase(writeFileStep).phase, COGNITIVE_PHASES.EXECUTION);
 
   // Verification
   const verifyStep = {
@@ -665,8 +743,11 @@ console.log('\n[Frontend Helper Unit Tests]');
 runTest('getToolCategory classifies tools into proper categories', () => {
   assert.equal(getToolCategory('replace_file_content').id, 'file');
   assert.equal(getToolCategory('write_to_file').id, 'file');
+  assert.equal(getToolCategory('edit_file').id, 'file');
+  assert.equal(getToolCategory('write_file').id, 'file');
   assert.equal(getToolCategory('run_command').id, 'shell');
   assert.equal(getToolCategory('view_file').id, 'read');
+  assert.equal(getToolCategory('read_file').id, 'read');
   assert.equal(getToolCategory('search_web').id, 'read');
   assert.equal(getToolCategory('invoke_subagent').id, 'agent');
   assert.equal(getToolCategory('send_message').id, 'agent');

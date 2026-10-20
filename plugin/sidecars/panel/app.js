@@ -45,13 +45,13 @@
 
   // Tool classification for the segmented spectrum
   function getToolCategory(toolName, serverName = null) {
-    if (['replace_file_content', 'write_to_file'].includes(toolName)) {
+    if (['replace_file_content', 'write_to_file', 'edit_file', 'write_file'].includes(toolName)) {
       return { id: 'file', label: 'File Edits', color: '#3b82f6', cls: 'segment-file' };
     }
     if (['run_command'].includes(toolName)) {
       return { id: 'shell', label: 'Shell / Terminal', color: '#8b5cf6', cls: 'segment-shell' };
     }
-    if (['view_file', 'read_url_content', 'search_web'].includes(toolName)) {
+    if (['view_file', 'read_file', 'read_url_content', 'search_web'].includes(toolName)) {
       return { id: 'read', label: 'Read / Search', color: '#10b981', cls: 'segment-read' };
     }
     if (['invoke_subagent', 'send_message', 'manage_subagents', 'define_subagent'].includes(toolName)) {

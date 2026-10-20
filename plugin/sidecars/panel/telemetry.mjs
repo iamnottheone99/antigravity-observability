@@ -454,15 +454,20 @@ function extractPrimaryArg(name, args = {}) {
   switch (name) {
     case 'run_command':
       return clean.CommandLine ? `$ ${clean.CommandLine}` : '';
-    case 'view_file': {
-      const path = clean.AbsolutePath || clean.TargetFile || '';
+    case 'view_file':
+    case 'read_file': {
+      const path = clean.Path || clean.AbsolutePath || clean.TargetFile || '';
       const range = clean.StartLine ? `:${clean.StartLine}${clean.EndLine ? `-${clean.EndLine}` : ''}` : '';
       return path ? `${path}${range}` : '';
     }
     case 'write_to_file':
-      return clean.TargetFile ? `Create ${clean.TargetFile}` : '';
-    case 'replace_file_content': {
-      const path = clean.TargetFile || '';
+    case 'write_file': {
+      const target = clean.Path || clean.TargetFile || '';
+      return target ? `Create ${target}` : '';
+    }
+    case 'replace_file_content':
+    case 'edit_file': {
+      const path = clean.Path || clean.TargetFile || '';
       const range = clean.StartLine ? ` (L${clean.StartLine}-L${clean.EndLine})` : '';
       return path ? `Edit ${path}${range}` : '';
     }
@@ -477,7 +482,7 @@ function extractPrimaryArg(name, args = {}) {
     case 'send_message':
       return clean.Recipient ? `To: ${clean.Recipient}` : '';
     default:
-      return clean.TargetFile || clean.AbsolutePath || clean.query || clean.CommandLine || clean.Url || '';
+      return clean.Path || clean.TargetFile || clean.AbsolutePath || clean.query || clean.CommandLine || clean.Url || '';
   }
 }
 
@@ -533,7 +538,7 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
       if (modelMatch && modelMatch[2]) {
         activeModel = modelMatch[2].trim();
       }
-      if (step.content.includes('<CONTEXT_SUMMARY>')) {
+      if ((step.type === 'USER_INPUT' || step.source === 'USER_EXPLICIT') && step.content.includes('<CONTEXT_SUMMARY>')) {
         compactionsCount++;
       }
     }
@@ -623,8 +628,8 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
           subagentCalls++;
         }
 
-        if (name === 'view_file') {
-          const path = tc.args?.AbsolutePath || tc.args?.TargetFile || '';
+        if (name === 'view_file' || name === 'read_file') {
+          const path = tc.args?.Path || tc.args?.AbsolutePath || tc.args?.TargetFile || '';
           const m = String(path).match(/[/\\]skills[/\\]([^/\\]+)[/\\]SKILL\.md/i);
           if (m && m[1]) {
             activeSkills.add(m[1].toLowerCase());
@@ -649,14 +654,14 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
           }
         }
 
-        if (name === 'write_to_file') {
-          const tf = tc.args?.TargetFile;
+        if (name === 'write_to_file' || name === 'write_file') {
+          const tf = tc.args?.Path || tc.args?.TargetFile;
           if (tf && (typeof tf === 'string') && (tf.includes('.md') || tf.includes('brain') || tc.args?.ArtifactMetadata)) {
             artifactsCount++;
           }
         }
 
-        const target = tc.args?.TargetFile || tc.args?.AbsolutePath;
+        const target = tc.args?.Path || tc.args?.TargetFile || tc.args?.AbsolutePath;
         if (target && typeof target === 'string') {
           filesTouched.add(target.replace(/^"|"$/g, ''));
         }
@@ -678,7 +683,7 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
           }
         }
 
-        const signature = `${name}:${tc.args?.CommandLine || tc.args?.AbsolutePath || tc.args?.TargetFile || ''}`;
+        const signature = `${name}:${tc.args?.CommandLine || tc.args?.Path || tc.args?.AbsolutePath || tc.args?.TargetFile || ''}`;
 
         recentToolCalls.push({
           name,
@@ -870,13 +875,13 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
  * @returns {{ id: string, label: string, color: string, cls: string, server?: string }}
  */
 export function getToolCategory(toolName, serverName = null) {
-  if (['replace_file_content', 'write_to_file'].includes(toolName)) {
+  if (['replace_file_content', 'write_to_file', 'edit_file', 'write_file'].includes(toolName)) {
     return { id: 'file', label: 'File Edits', color: '#3b82f6', cls: 'segment-file' };
   }
   if (['run_command'].includes(toolName)) {
     return { id: 'shell', label: 'Shell / Terminal', color: '#8b5cf6', cls: 'segment-shell' };
   }
-  if (['view_file', 'read_url_content', 'search_web'].includes(toolName)) {
+  if (['view_file', 'read_file', 'read_url_content', 'search_web'].includes(toolName)) {
     return { id: 'read', label: 'Read / Search', color: '#10b981', cls: 'segment-read' };
   }
   if (['invoke_subagent', 'send_message', 'manage_subagents', 'define_subagent'].includes(toolName)) {

@@ -25,6 +25,12 @@ All notable changes to the Antigravity Observability Companion will be documente
 - **Traces Error Cluster Filters**: Added `#error-clusters-filter` sub-filter chips container in the Traces tab for rapid one-click root-cause filtering.
 - **Per-Step Root-Cause Badges & Diagnostics**: Integrated color-coded root-cause badges and formatted error cards in trace cards and detail drawers.
 
+### Fixed
+- **Antigravity 2.0 Tool Call Recognition**: Added full support for modern tool names (`read_file`, `edit_file`, `write_file` with parameter `Path`) across tool categorizers, primary argument extractors, `filesTouched` tracking, and cognitive phase assignment.
+- **Compaction Detection Guard**: Constrained `<CONTEXT_SUMMARY>` detection strictly to user input steps (`step.type === 'USER_INPUT'` or `step.source === 'USER_EXPLICIT'`) to prevent false positives when assistant text mentions compaction.
+- **Empty Session Fallback**: Unified the sidecar `waiting_for_transcript` fallback with `parseTranscript('', ...)`, ensuring `healthScorecard` and `errorTaxonomy` are always fully populated.
+- **Status Version Alignment**: Corrected the `/api/status` endpoint version output to `1.4.0`.
+
 ## [1.3.0] - 2026-10-14
 
 ### Added

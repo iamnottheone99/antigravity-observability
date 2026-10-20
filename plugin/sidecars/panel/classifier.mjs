@@ -329,7 +329,7 @@ export function classifyStepPhase(step = {}) {
     const arg = primaryTool.primaryArg || '';
 
     // File editing and creation -> Execution
-    if (['replace_file_content', 'write_to_file'].includes(name)) {
+    if (['replace_file_content', 'write_to_file', 'edit_file', 'write_file'].includes(name)) {
       return {
         phase: COGNITIVE_PHASES.EXECUTION,
         confidence: 0.92,
@@ -377,7 +377,7 @@ export function classifyStepPhase(step = {}) {
     }
 
     // Reading, web browsing, discovery -> Exploration
-    if (['view_file', 'read_url_content', 'search_web', 'list_resources', 'read_resource'].includes(name)) {
+    if (['view_file', 'read_file', 'read_url_content', 'search_web', 'list_resources', 'read_resource'].includes(name)) {
       return {
         phase: COGNITIVE_PHASES.EXPLORATION,
         confidence: 0.94,
