@@ -27,7 +27,8 @@ const DB_PATH = join(homedir(), '.gemini', 'antigravity', 'conversation_summarie
 let cachedSessions = null;
 let sessionsCacheExpiry = 0;
 const SESSIONS_TTL_MS = 5000; // 5-second session listing TTL
-const transcriptCache = new Map(); // conversationId -> { mtimeMs, size, report }
+const TRANSCRIPT_TTL_MS = 60000; // 60-second transcript cache TTL
+const transcriptCache = new Map(); // conversationId -> { mtimeMs, size, report, expiresAt }
 
 const app = new SidecarApp();
 
@@ -223,12 +224,14 @@ app.api('/api/telemetry', (params) => {
     return { error: `Failed to stat transcript: ${err.message}`, status: 'read_error' };
   }
 
-  // Check stat cache: avoid re-reading and re-parsing unchanged transcripts unless forced
+  const now = Date.now();
+
+  // Check stat cache: avoid re-reading and re-parsing unchanged transcripts unless forced or expired
   if (isForced) {
     transcriptCache.delete(conversationId);
   } else {
     const cached = transcriptCache.get(conversationId);
-    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+    if (cached && now < cached.expiresAt && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
       return {
         ...cached.report,
         activeTitle,
@@ -252,6 +255,13 @@ app.api('/api/telemetry', (params) => {
     sessions: recentSessions,
   });
 
+  // Prune expired entries to release memory for inactive sessions
+  for (const [id, entry] of transcriptCache.entries()) {
+    if (now >= entry.expiresAt) {
+      transcriptCache.delete(id);
+    }
+  }
+
   if (transcriptCache.size >= 50) {
     const oldestKey = transcriptCache.keys().next().value;
     transcriptCache.delete(oldestKey);
@@ -261,6 +271,7 @@ app.api('/api/telemetry', (params) => {
     mtimeMs: stat.mtimeMs,
     size: stat.size,
     report: parsed,
+    expiresAt: now + TRANSCRIPT_TTL_MS,
   });
 
   return parsed;

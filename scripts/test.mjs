@@ -82,6 +82,13 @@ runTest('sidecar main.mjs status route matches version 1.4.0', () => {
   assert.ok(code.includes("version: '1.4.0'"), 'main.mjs status version is not 1.4.0');
 });
 
+runTest('sidecar main.mjs defines transcript cache TTL and expiry pruning', () => {
+  const code = readFileSync(join(PLUGIN, 'sidecars/panel/main.mjs'), 'utf8');
+  assert.ok(code.includes('TRANSCRIPT_TTL_MS = 60000'), 'Missing TRANSCRIPT_TTL_MS constant');
+  assert.ok(code.includes('now < cached.expiresAt'), 'Missing cache expiry verification check');
+  assert.ok(code.includes('transcriptCache.delete(id)'), 'Missing cache pruning logic');
+});
+
 runTest('root package.json is valid and declares engines', () => {
   const data = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   assert.equal(data.name, 'antigravity-observability');

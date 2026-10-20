@@ -29,6 +29,7 @@ All notable changes to the Antigravity Observability Companion will be documente
 - **Antigravity 2.0 Tool Call Recognition**: Added full support for modern tool names (`read_file`, `edit_file`, `write_file` with parameter `Path`) across tool categorizers, primary argument extractors, `filesTouched` tracking, and cognitive phase assignment.
 - **Compaction Detection Guard**: Constrained `<CONTEXT_SUMMARY>` detection strictly to user input steps (`step.type === 'USER_INPUT'` or `step.source === 'USER_EXPLICIT'`) to prevent false positives when assistant text mentions compaction.
 - **Empty Session Fallback**: Unified the sidecar `waiting_for_transcript` fallback with `parseTranscript('', ...)`, ensuring `healthScorecard` and `errorTaxonomy` are always fully populated.
+- **Transcript In-Memory Cache TTL**: Added a 60-second time-to-live (`TRANSCRIPT_TTL_MS = 60000`) and automatic expiry pruning for cached transcript records in `main.mjs`, freeing memory for inactive sessions.
 - **Status Version Alignment**: Corrected the `/api/status` endpoint version output to `1.4.0`.
 
 ## [1.3.0] - 2026-10-14
