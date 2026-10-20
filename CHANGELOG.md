@@ -32,7 +32,7 @@ All notable changes to the Antigravity Observability Companion will be documente
 - **Cognitive Phase Spectrum**: Segmented overview bar and interactive legend displaying session time distribution across cognitive phases.
 - **Per-Step Cognitive Badges**: Traces timeline renders distinct phase pills (`[EXPLORATION]`, `[EXECUTION]`, `[VERIFICATION]`, `[RECOVERY]`, `[SYNTHESIS]`) for every execution step.
 - **Semantic Loop Radar**: Vector and statistical n-gram similarity engine that detects semantic repetition loops (varied arguments, repeated slice reads, test retries) beyond naive exact-string matching.
-- **Connected MCP Embedding Bridge (`classifier.mjs`)**: Directly leverages local `zvec-grep` neural embeddings (`local/potion-code-16m-v2`) via dynamic resolver when present, with a fast, zero-dependency statistical n-gram fallback.
+- **Connected MCP Embedding Bridge (`classifier.mjs`)**: Directly leverages local neural embeddings powered by [Zvec](https://github.com/alibaba/zvec) and [zvec-grep](https://github.com/zvec-ai/zvec-grep) (`local/potion-code-16m-v2`) via dynamic resolver when present, with a fast, zero-dependency statistical n-gram fallback.
 - **Trace Search by Cognitive Phase**: Traces search input now supports queries matching cognitive phase labels directly (e.g. `recovery`, `verification`).
 
 ## [1.2.1] - 2026-10-12

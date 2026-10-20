@@ -1,6 +1,7 @@
 /**
  * Cognitive Phase Classifier & Semantic Loop Detection Engine for Antigravity Observability.
- * Leverages local zvec-grep vector embeddings (local/potion-code-16m-v2) when available,
+ * Leverages local vector embeddings (local/potion-code-16m-v2) powered by Zvec
+ * (https://github.com/alibaba/zvec) and zvec-grep (https://github.com/zvec-ai/zvec-grep) when available,
  * with a high-performance zero-dependency statistical n-gram fallback.
  */
 

@@ -226,7 +226,7 @@ Computes pairwise vector cosine similarity across step execution signatures:
 
 $$\text{Similarity}(\mathbf{u}, \mathbf{v}) = \frac{\mathbf{u} \cdot \mathbf{v}}{\|\mathbf{u}\| \|\mathbf{v}\|} = \frac{\sum_{i=1}^{d} u_i v_i}{\sqrt{\sum_{i=1}^{d} u_i^2} \sqrt{\sum_{i=1}^{d} v_i^2}}$$
 
-When local `zvec-grep` is detected, 256-dimensional dense vectors are generated using `local/potion-code-16m-v2`. When offline, a high-speed character 3-gram term-frequency cosine metric is used. Flags loops when consecutive or windowed steps exceed $\text{Similarity} \ge 0.75$.
+When local `zvec-grep` is detected, 256-dimensional dense vectors are generated using `local/potion-code-16m-v2` via the [Zvec](https://github.com/alibaba/zvec) vector database engine. When offline, a high-speed character 3-gram term-frequency cosine metric is used. Flags loops when consecutive or windowed steps exceed $\text{Similarity} \ge 0.75$.
 
 ### Cognitive Phase Classification
 Classifies each step into one of 5 canonical agent lifecycle states:

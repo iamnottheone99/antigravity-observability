@@ -31,7 +31,7 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
   - Traces filter search natively matches cognitive phases (e.g., searching "recovery" or "verification").
 * **Semantic Loop & Stall Radar**:
   - Detects semantic action loops beyond exact signature matches (e.g. repeated file slicing, command variations, test retry loops) by computing vector and n-gram similarity across execution windows.
-  - Leverages local `zvec-grep` neural embeddings (`local/potion-code-16m-v2`) when present, with a high-speed zero-dependency statistical n-gram fallback.
+  - Leverages local neural embeddings powered by **[Zvec](https://github.com/alibaba/zvec)** and **[zvec-grep](https://github.com/zvec-ai/zvec-grep)** (`local/potion-code-16m-v2`) when present, with a high-speed zero-dependency statistical n-gram fallback.
   - Flags loops in the real-time Alert Banner with exact similarity metrics (e.g., "Repetitive exploration loop detected (88% similarity across 3 steps)").
 * **Prompt Cache Analytics**:
   - Detailed prompt cache savings ($0.1125 / 1M tokens saved) and token breakdown in session reports.
@@ -180,6 +180,14 @@ npm test
 * [API Reference](docs/API.md) — Sidecar HTTP routes, schema, and pricing formulas.
 * [Contributing Guide](CONTRIBUTING.md) — Development setup and contribution workflow.
 * [Changelog](CHANGELOG.md) — Version release notes.
+
+---
+
+## Acknowledgements & Credits
+
+* **[Zvec](https://github.com/alibaba/zvec)** ([alibaba/zvec](https://github.com/alibaba/zvec) & [zvec.org](https://zvec.org)) — The open-source, in-process vector database engine by Alibaba Group. Powers the high-performance local vector representation and similarity calculations for semantic loop detection and cognitive phase classification without cloud latency or external API keys.
+* **[zvec-grep](https://github.com/zvec-ai/zvec-grep)** ([zvec-ai/zvec-grep](https://github.com/zvec-ai/zvec-grep)) — Local-first hybrid search layer and daemon that provides the ONNX embedding pipeline (`potion-code-16m-v2`) integrated with Antigravity.
+* **[Opik](https://github.com/comet-ml/opik)** ([comet-ml/opik](https://github.com/comet-ml/opik)) — Inspiration for the Agent Health Scorecard and Error Root-Cause Taxonomy breakdown.
 
 ---
 
