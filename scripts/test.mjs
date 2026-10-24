@@ -92,7 +92,7 @@ runTest('sidecar main.mjs defines transcript cache TTL and expiry pruning', () =
 
 runTest('CI workflow restricts GITHUB_TOKEN permissions to read-only', () => {
   const ciYaml = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
-  assert.ok(ciYaml.includes('permissions:\n  contents: read'), 'Missing read-only permissions in ci.yml');
+  assert.ok(/permissions:\s*[\r\n]+\s*contents:\s*read/.test(ciYaml), 'Missing read-only permissions in ci.yml');
 });
 
 runTest('root package.json is valid and declares engines', () => {
