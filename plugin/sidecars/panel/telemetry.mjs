@@ -427,19 +427,37 @@ export function calculateAgentHealth({
 }
 
 /**
- * Cleans string argument values by stripping outer quotes and parsing JSON if applicable.
+ * Redacts common credentials, tokens, and authorization headers from strings.
+ *
+ * @param {string} val
+ * @returns {string}
+ */
+export function redactSecrets(val) {
+  if (typeof val !== 'string') return val;
+  return val
+    .replace(/(bearer\s+)[a-zA-Z0-9_\-\.]{15,}/gi, '$1[REDACTED]')
+    .replace(/(gh[pousr]_[A-Za-z0-9_]{36,})/g, '[REDACTED_GH_TOKEN]')
+    .replace(/(github_pat_[A-Za-z0-9_]{82})/g, '[REDACTED_GH_PAT]')
+    .replace(/(https?:\/\/[^/:]+:)[^/@]+(@)/g, '$1[REDACTED]$2')
+    .replace(/((?:key|token|secret|password|passwd|apiKey|api_key)\s*[:=]\s*)(["']?)[a-zA-Z0-9_\-\.]{12,}\2/gi, '$1$2[REDACTED]$2');
+}
+
+/**
+ * Cleans string argument values by stripping outer quotes and parsing JSON if applicable,
+ * with automatic credential masking.
  */
 function cleanArgValue(val) {
   if (typeof val !== 'string') return val;
   const trimmed = val.trim();
+  let str = trimmed;
   if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
     try {
-      return JSON.parse(trimmed);
+      str = JSON.parse(trimmed);
     } catch {
-      return trimmed.slice(1, -1);
+      str = trimmed.slice(1, -1);
     }
   }
-  return trimmed;
+  return typeof str === 'string' ? redactSecrets(str) : str;
 }
 
 /**
@@ -534,9 +552,11 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
     const step = rawSteps[i];
 
     if (typeof step.content === 'string') {
-      const modelMatch = step.content.match(/Model Selection\` from ((?:(?! to ).)+) to (.+?)\.\s*(?:No need|$|\n|<)/);
-      if (modelMatch && modelMatch[2]) {
-        activeModel = modelMatch[2].trim();
+      if (step.content.includes('Model Selection` from')) {
+        const modelMatch = step.content.match(/Model Selection\` from ((?:(?! to ).)+) to (.+?)\.\s*(?:No need|$|\n|<)/);
+        if (modelMatch && modelMatch[2]) {
+          activeModel = modelMatch[2].trim();
+        }
       }
       if ((step.type === 'USER_INPUT' || step.source === 'USER_EXPLICIT') && step.content.includes('<CONTEXT_SUMMARY>')) {
         compactionsCount++;
@@ -564,7 +584,7 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
 
     if (Array.isArray(step.tool_calls) && step.tool_calls.length > 0 && nextStep) {
       if (typeof nextStep.content === 'string' && nextStep.content.trim()) {
-        outputSnippet = nextStep.content.trim().slice(0, 2500);
+        outputSnippet = redactSecrets(nextStep.content.trim()).slice(0, 2500);
         if (
           nextStep.status === 'ERROR' ||
           nextStep.content.includes('"exit status 1"') ||
@@ -577,7 +597,7 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
         pairedError = true;
       }
     } else if (typeof step.content === 'string' && step.content.trim()) {
-      outputSnippet = step.content.trim().slice(0, 2500);
+      outputSnippet = redactSecrets(step.content.trim()).slice(0, 2500);
     }
 
     const isError = step.status === 'ERROR' ||
@@ -588,7 +608,7 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
 
     // Thinking / reasoning preview
     const thinkingSnippet = typeof step.thinking === 'string' && step.thinking.trim()
-      ? step.thinking.trim().slice(0, 1500)
+      ? redactSecrets(step.thinking.trim()).slice(0, 1500)
       : '';
 
     // Extract user request snippet if this is a user input step
@@ -596,7 +616,8 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
     if (step.type === 'USER_INPUT' || step.source === 'USER_EXPLICIT') {
       const text = step.content || '';
       const reqMatch = text.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
-      userPrompt = reqMatch ? reqMatch[1].trim() : text.trim().slice(0, 500);
+      const rawPrompt = reqMatch ? reqMatch[1].trim() : text.trim().slice(0, 500);
+      userPrompt = redactSecrets(rawPrompt);
     }
 
     const toolsInStep = [];
@@ -740,7 +761,7 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
       stepCost,
       tools: toolsInStep,
       thinking: thinkingSnippet,
-      content: typeof step.content === 'string' ? step.content.trim().slice(0, 1500) : '',
+      content: typeof step.content === 'string' ? redactSecrets(step.content.trim()).slice(0, 1500) : '',
       userPrompt,
       outputSnippet,
       category,
@@ -935,6 +956,7 @@ export function escapeHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 

@@ -32,6 +32,12 @@ All notable changes to the Antigravity Observability Companion will be documente
 - **Transcript In-Memory Cache TTL**: Added a 60-second time-to-live (`TRANSCRIPT_TTL_MS = 60000`) and automatic expiry pruning for cached transcript records in `main.mjs`, freeing memory for inactive sessions.
 - **Status Version Alignment**: Corrected the `/api/status` endpoint version output to `1.4.0`.
 
+### Security
+- **Credential & Secret Redaction**: Added `redactSecrets` sanitization in `telemetry.mjs` to scrub Bearer tokens, GitHub PATs, HTTP Basic Auth URL credentials, and common secret patterns from tool arguments, primary argument previews, thinking reasoning blocks, and output snippets.
+- **HTML Entity Escaping**: Enhanced `escapeHtml` in `telemetry.mjs` and `app.js` to escape single quotes (`&#39;`) in addition to `&`, `<`, `>`, and `"`, meeting OWASP ASVS v4.0.3 requirements.
+- **Regex DoS Mitigation**: Added fast substring pre-filter before executing quantified lookahead model selection regular expression on long step content.
+- **Least-Privilege CI Permissions**: Explicitly configured `permissions: contents: read` in `.github/workflows/ci.yml`.
+
 ## [1.3.0] - 2026-10-14
 
 ### Added

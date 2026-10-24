@@ -13,6 +13,7 @@ import {
   formatTokens,
   getToolCategory,
   parseTranscript,
+  redactSecrets,
   COGNITIVE_PHASES,
   PHASE_METADATA,
   analyzeSessionCognition,
@@ -87,6 +88,11 @@ runTest('sidecar main.mjs defines transcript cache TTL and expiry pruning', () =
   assert.ok(code.includes('TRANSCRIPT_TTL_MS = 60000'), 'Missing TRANSCRIPT_TTL_MS constant');
   assert.ok(code.includes('now < cached.expiresAt'), 'Missing cache expiry verification check');
   assert.ok(code.includes('transcriptCache.delete(id)'), 'Missing cache pruning logic');
+});
+
+runTest('CI workflow restricts GITHUB_TOKEN permissions to read-only', () => {
+  const ciYaml = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+  assert.ok(ciYaml.includes('permissions:\n  contents: read'), 'Missing read-only permissions in ci.yml');
 });
 
 runTest('root package.json is valid and declares engines', () => {
@@ -442,6 +448,56 @@ runTest('parseTranscript recognizes modern Antigravity 2.0 tool calls with Path 
   assert.equal(step.tools[2].category, 'file');
 });
 
+runTest('redactSecrets sanitizes Bearer tokens, GitHub PATs, and URL credentials', () => {
+  assert.equal(
+    redactSecrets('Authorization: Bearer ya29.a0AWY7C1234567890abcdef'),
+    'Authorization: Bearer [REDACTED]'
+  );
+  assert.equal(
+    redactSecrets('token: ghp_1234567890abcdefghijklmnopqrstuvwxyz'),
+    'token: [REDACTED_GH_TOKEN]'
+  );
+  assert.equal(
+    redactSecrets('git clone https://x-access-token:ghs_secret123456789@github.com/repo.git'),
+    'git clone https://x-access-token:[REDACTED]@github.com/repo.git'
+  );
+  assert.equal(
+    redactSecrets('apiKey="AIzaSyA1234567890abcdef"'),
+    'apiKey="[REDACTED]"'
+  );
+});
+
+runTest('parseTranscript redacts sensitive credentials from tool args and outputs', () => {
+  const log = [
+    JSON.stringify({
+      step_index: 0,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      thinking: 'Connecting with Bearer ya29.a0AWY7C1234567890abcdef',
+      tool_calls: [
+        {
+          name: 'run_command',
+          args: { CommandLine: 'curl -H "Authorization: Bearer secret-token-123456789" https://api.example.com' },
+        },
+      ],
+    }),
+    JSON.stringify({
+      step_index: 1,
+      source: 'SYSTEM',
+      type: 'TOOL_RESPONSE',
+      content: 'Output contains apiKey="AIzaSyA1234567890abcdef" successfully',
+    }),
+  ].join('\n');
+
+  const report = parseTranscript(log, { conversationId: 'c-secret' });
+  assert.ok(!report.recentSteps[0].outputSnippet.includes('AIzaSyA1234567890abcdef'));
+  assert.ok(report.recentSteps[0].outputSnippet.includes('[REDACTED]'));
+  assert.ok(!report.recentSteps[1].thinking.includes('ya29.a0AWY7C1234567890abcdef'));
+  assert.ok(report.recentSteps[1].thinking.includes('[REDACTED]'));
+  assert.ok(!report.recentSteps[1].tools[0].primaryArg.includes('secret-token-123456789'));
+  assert.ok(report.recentSteps[1].tools[0].primaryArg.includes('[REDACTED]'));
+});
+
 runTest('classifyError categorizes all 8 error taxonomy categories accurately', () => {
   // 1. Path not found
   const pathErr1 = classifyError('GetFileAttributesEx c:\\Users\\test\\missing.txt: The system cannot find the path specified.');
@@ -772,9 +828,10 @@ runTest('formatTokens formats values with k and M units correctly', () => {
   assert.equal(formatTokens(1250000), '1.25M');
 });
 
-runTest('escapeHtml escapes dangerous HTML entities', () => {
+runTest('escapeHtml escapes dangerous HTML entities including single quotes', () => {
   assert.equal(escapeHtml('<script>alert("xss")</script>'), '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
   assert.equal(escapeHtml('foo & bar'), 'foo &amp; bar');
+  assert.equal(escapeHtml("it's a test"), 'it&#39;s a test');
   assert.equal(escapeHtml(null), '');
   assert.equal(escapeHtml(undefined), '');
 });
