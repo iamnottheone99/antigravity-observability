@@ -33,7 +33,8 @@ All notable changes to the Antigravity Observability Companion will be documente
 - **Status Version Alignment**: Corrected the `/api/status` endpoint version output to `1.4.0`.
 
 ### Security
-- **Credential & Secret Redaction**: Added `redactSecrets` sanitization in `telemetry.mjs` to scrub Bearer tokens, GitHub PATs, HTTP Basic Auth URL credentials, and common secret patterns from tool arguments, primary argument previews, thinking reasoning blocks, and output snippets.
+- **Credential & Secret Redaction**: Added and extended `redactSecrets` sanitization in `telemetry.mjs` to scrub PEM private keys, Bearer tokens, GitHub PATs, AWS access keys (`AKIA...`), Slack tokens (`xoxb...`), raw JWTs, HTTP Basic Auth URL credentials, and common secret assignments from tool arguments, primary argument previews, thinking reasoning blocks, and output snippets.
+- **HTTP Security Response Headers**: Injected `X-Content-Type-Options: nosniff` and `X-Frame-Options: SAMEORIGIN` headers on sidecar static file responses (`/`, `/app.js`, `/styles.css`) via `Response` wrapper in `main.mjs`.
 - **HTML Entity Escaping**: Enhanced `escapeHtml` in `telemetry.mjs` and `app.js` to escape single quotes (`&#39;`) in addition to `&`, `<`, `>`, and `"`, meeting OWASP ASVS v4.0.3 requirements.
 - **Regex DoS Mitigation**: Added fast substring pre-filter before executing quantified lookahead model selection regular expression on long step content.
 - **Least-Privilege CI Permissions**: Explicitly configured `permissions: contents: read` in `.github/workflows/ci.yml`.

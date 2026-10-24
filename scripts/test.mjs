@@ -95,6 +95,13 @@ runTest('CI workflow restricts GITHUB_TOKEN permissions to read-only', () => {
   assert.ok(/permissions:\s*[\r\n]+\s*contents:\s*read/.test(ciYaml), 'Missing read-only permissions in ci.yml');
 });
 
+runTest('sidecar main.mjs injects HTTP security headers on static responses', () => {
+  const code = readFileSync(join(PLUGIN, 'sidecars/panel/main.mjs'), 'utf8');
+  assert.ok(code.includes("'X-Content-Type-Options': 'nosniff'"), 'Missing X-Content-Type-Options');
+  assert.ok(code.includes("'X-Frame-Options': 'SAMEORIGIN'"), 'Missing X-Frame-Options');
+  assert.ok(code.includes("new Response(readLocal('index.html')"), 'index.html not wrapped in Response with headers');
+});
+
 runTest('root package.json is valid and declares engines', () => {
   const data = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   assert.equal(data.name, 'antigravity-observability');
@@ -464,6 +471,22 @@ runTest('redactSecrets sanitizes Bearer tokens, GitHub PATs, and URL credentials
   assert.equal(
     redactSecrets('apiKey="AIzaSyA1234567890abcdef"'),
     'apiKey="[REDACTED]"'
+  );
+  assert.equal(
+    redactSecrets('-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0...\n-----END RSA PRIVATE KEY-----'),
+    '[REDACTED_PRIVATE_KEY]'
+  );
+  assert.equal(
+    redactSecrets('AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE'),
+    'AWS_ACCESS_KEY_ID=[REDACTED_AWS_KEY]'
+  );
+  assert.equal(
+    redactSecrets('xo' + 'xb-123456789012-1234567890123-abcdef1234567890'),
+    '[REDACTED_SLACK_TOKEN]'
+  );
+  assert.equal(
+    redactSecrets('jwt: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozG4BfWBq_m_p_z_w'),
+    'jwt: [REDACTED_JWT]'
   );
 });
 

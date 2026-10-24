@@ -435,9 +435,13 @@ export function calculateAgentHealth({
 export function redactSecrets(val) {
   if (typeof val !== 'string') return val;
   return val
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[REDACTED_PRIVATE_KEY]')
     .replace(/(bearer\s+)[a-zA-Z0-9_\-\.]{15,}/gi, '$1[REDACTED]')
     .replace(/(gh[pousr]_[A-Za-z0-9_]{36,})/g, '[REDACTED_GH_TOKEN]')
     .replace(/(github_pat_[A-Za-z0-9_]{82})/g, '[REDACTED_GH_PAT]')
+    .replace(/\b(AKIA[0-9A-Z]{16})\b/g, '[REDACTED_AWS_KEY]')
+    .replace(/\b(xox[baprs]-[0-9a-zA-Z-]{10,72})\b/g, '[REDACTED_SLACK_TOKEN]')
+    .replace(/\b(eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,})\b/g, '[REDACTED_JWT]')
     .replace(/(https?:\/\/[^/:]+:)[^/@]+(@)/g, '$1[REDACTED]$2')
     .replace(/((?:key|token|secret|password|passwd|apiKey|api_key)\s*[:=]\s*)(["']?)[a-zA-Z0-9_\-\.]{12,}\2/gi, '$1$2[REDACTED]$2');
 }

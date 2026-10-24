@@ -34,10 +34,15 @@ const app = new SidecarApp();
 
 const readLocal = (name) => readFileSync(join(HERE, name), 'utf8');
 
-// Static file routes
-app.page('/', () => readLocal('index.html'));
-app.page('/app.js', () => readLocal('app.js'));
-app.api('/styles.css', () => new Response(readLocal('styles.css'), { contentType: 'text/css' }), 'GET');
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'SAMEORIGIN',
+};
+
+// Static file routes with security headers
+app.page('/', () => new Response(readLocal('index.html'), { contentType: 'text/html', headers: SECURITY_HEADERS }));
+app.page('/app.js', () => new Response(readLocal('app.js'), { contentType: 'application/javascript', headers: SECURITY_HEADERS }));
+app.api('/styles.css', () => new Response(readLocal('styles.css'), { contentType: 'text/css', headers: SECURITY_HEADERS }), 'GET');
 
 // System status
 app.api('/api/status', () => ({
