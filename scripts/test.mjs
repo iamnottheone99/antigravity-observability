@@ -155,6 +155,7 @@ checkJsSyntax('plugin/sidecars/panel/classifier.mjs');
 checkJsSyntax('plugin/sidecars/panel/app.js');
 checkJsSyntax('scripts/install.mjs');
 checkJsSyntax('scripts/test.mjs');
+checkJsSyntax('tests/panel.test.js');
 
 // -----------------------------------------------------------------------------
 // 3. Telemetry Engine Unit Tests
@@ -857,6 +858,11 @@ runTest('escapeHtml escapes dangerous HTML entities including single quotes', ()
   assert.equal(escapeHtml("it's a test"), 'it&#39;s a test');
   assert.equal(escapeHtml(null), '');
   assert.equal(escapeHtml(undefined), '');
+});
+
+runTest('panel UI test suite executes all 22 component functions cleanly', () => {
+  const out = execFileSync(process.execPath, [join(ROOT, 'tests/panel.test.js')], { encoding: 'utf8' });
+  assert.ok(out.includes('All 22 panel functions executed and verified successfully'), 'Panel tests failed');
 });
 
 // -----------------------------------------------------------------------------

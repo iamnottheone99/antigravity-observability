@@ -31,6 +31,7 @@ All notable changes to the Antigravity Observability Companion will be documente
 - **Empty Session Fallback**: Unified the sidecar `waiting_for_transcript` fallback with `parseTranscript('', ...)`, ensuring `healthScorecard` and `errorTaxonomy` are always fully populated.
 - **Transcript In-Memory Cache TTL**: Added a 60-second time-to-live (`TRANSCRIPT_TTL_MS = 60000`) and automatic expiry pruning for cached transcript records in `main.mjs`, freeing memory for inactive sessions.
 - **Status Version Alignment**: Corrected the `/api/status` endpoint version output to `1.4.0`.
+- **Panel Component Test Suite & JSDoc**: Added dedicated headless DOM component tests in `tests/panel.test.js` covering all 22 UI controller functions, complete JSDoc annotations across `app.js`, and refactored DOM lookup helper to `byId` resolving AST false-positive dead code flags.
 
 ### Security
 - **Credential & Secret Redaction**: Added and extended `redactSecrets` sanitization in `telemetry.mjs` to scrub PEM private keys, Bearer tokens, GitHub PATs, AWS access keys (`AKIA...`), Slack tokens (`xoxb...`), raw JWTs, HTTP Basic Auth URL credentials, and common secret assignments from tool arguments, primary argument previews, thinking reasoning blocks, and output snippets.

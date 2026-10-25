@@ -1,8 +1,15 @@
 (() => {
   'use strict';
 
-  const sidecar = window.sidecar;
-  const $ = (id) => document.getElementById(id);
+  const sidecar = typeof window !== 'undefined' ? window.sidecar : (typeof globalThis !== 'undefined' ? globalThis.sidecar : null);
+
+  /**
+   * Look up DOM element by its ID.
+   * @param {string} id - Target DOM element identifier.
+   * @returns {HTMLElement|null} Found element or null.
+   */
+  const byId = (id) => (typeof document !== 'undefined' && document ? document.getElementById(id) : null);
+  const $ = byId;
 
   let currentMode = 'all'; // 'all' | 'tools' | 'errors'
   let selectedErrorCluster = 'all';
@@ -16,9 +23,13 @@
   let isMonitoring = true;
   let monitorInterval = null;
 
+  /**
+   * Display temporary toast feedback notification.
+   * @param {string} msg - Message string to display.
+   */
   function showToast(msg) {
-    const toast = $('toast');
-    const toastMsg = $('toast-msg');
+    const toast = byId('toast');
+    const toastMsg = byId('toast-msg');
     toastMsg.textContent = msg;
     toast.classList.add('visible');
     clearTimeout(toastTimer);
@@ -27,6 +38,11 @@
     }, 2400);
   }
 
+  /**
+   * Format numerical token counts into human-readable shorthand (k / M).
+   * @param {number} num - Raw token count.
+   * @returns {string} Formatted token string.
+   */
   function formatTokens(num) {
     if (!num || isNaN(num)) return '0';
     if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
@@ -34,6 +50,11 @@
     return String(num);
   }
 
+  /**
+   * Sanitize string for secure insertion into HTML contexts.
+   * @param {string} str - Unsanitized input string.
+   * @returns {string} Escaped HTML string.
+   */
   function escapeHtml(str) {
     if (!str) return '';
     return String(str)
@@ -44,7 +65,12 @@
       .replace(/'/g, '&#39;');
   }
 
-  // Tool classification for the segmented spectrum
+  /**
+   * Categorize tool execution for segmented spectrum display.
+   * @param {string} toolName - Name of invoked tool.
+   * @param {string|null} [serverName=null] - Optional MCP server name.
+   * @returns {{ id: string, label: string, color: string, cls: string, server?: string }}
+   */
   function getToolCategory(toolName, serverName = null) {
     if (['replace_file_content', 'write_to_file', 'edit_file', 'write_file'].includes(toolName)) {
       return { id: 'file', label: 'File Edits', color: '#3b82f6', cls: 'segment-file' };
@@ -81,6 +107,11 @@
     return { id: 'other', label: 'Other Tools', color: '#64748b', cls: 'segment-other' };
   }
 
+  /**
+   * Dispatch steering prompt message to the active agent conversation.
+   * @param {string} text - User steer instruction text.
+   * @returns {Promise<void>}
+   */
   async function sendSteerMessage(text) {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -102,17 +133,23 @@
     try {
       await sidecar.agent.sendMessage(trimmed, targetConvId);
       showToast('Instruction dispatched to agent');
-      $('steer-input').value = '';
+      byId('steer-input').value = '';
     } catch (err) {
       showToast(`Failed to dispatch: ${err.message}`);
     }
   }
 
+  /**
+   * Render the segmented tool usage spectrum and distribution legend.
+   * @param {Record<string, number>} [toolCounts={}] - Map of tool names to call counts.
+   * @param {Record<string, number>} [mcpServers={}] - Map of MCP server names to call counts.
+   * @param {string[]} [activeSkills=[]] - List of active skills in session.
+   */
   function renderToolSpectrum(toolCounts = {}, mcpServers = {}, activeSkills = []) {
-    const barEl = $('spectrum-bar');
-    const legendEl = $('spectrum-legend');
-    const totalEl = $('spectrum-total');
-    const skillsEl = $('spectrum-skills');
+    const barEl = byId('spectrum-bar');
+    const legendEl = byId('spectrum-legend');
+    const totalEl = byId('spectrum-total');
+    const skillsEl = byId('spectrum-skills');
 
     const entries = Object.entries(toolCounts);
     const totalCalls = entries.reduce((sum, [, count]) => sum + count, 0);
@@ -190,12 +227,18 @@
     }
   }
 
-  // Render cognitive phase distribution bar & legend
+  /**
+   * Render cognitive reasoning phase distribution bar and status pill.
+   * @param {Record<string, number>} [dist={}] - Percentage distribution of phases.
+   * @param {string} [currentPhase='SYNTHESIS'] - Current cognitive phase key.
+   * @param {string} [currentPhaseLabel='Synthesis'] - Human-readable current phase label.
+   * @param {Record<string, any>} [engineStatus={}] - Semantic classifier engine metadata.
+   */
   function renderCognitiveSpectrum(dist = {}, currentPhase = 'SYNTHESIS', currentPhaseLabel = 'Synthesis', engineStatus = {}) {
-    const barEl = $('cognitive-phase-bar');
-    const legendEl = $('cognitive-phase-legend');
-    const currentPill = $('val-current-phase');
-    const engineBadge = $('val-classifier-engine');
+    const barEl = byId('cognitive-phase-bar');
+    const legendEl = byId('cognitive-phase-legend');
+    const currentPill = byId('val-current-phase');
+    const engineBadge = byId('val-classifier-engine');
 
     if (currentPill) {
       currentPill.textContent = currentPhaseLabel || currentPhase;
@@ -243,7 +286,27 @@
     ).join('');
   }
 
-  // Render Automated Agent Health Scorecard (Tile + Breakdown section)
+  /**
+   * Update an individual health scorecard pillar percentage and color bar.
+   * @param {string} id - Pillar identifier ('reliability', 'loop', 'phase', 'context').
+   * @param {number} val - Pillar score percentage (0-100).
+   */
+  const setPillar = (id, val) => {
+    const vEl = byId(`pillar-val-${id}`);
+    const bEl = byId(`pillar-bar-${id}`);
+    if (vEl) vEl.textContent = `${val}%`;
+    if (bEl) {
+      bEl.style.width = `${Math.min(100, Math.max(0, val))}%`;
+      if (val < 60) bEl.style.backgroundColor = 'var(--destructive)';
+      else if (val < 80) bEl.style.backgroundColor = 'var(--warning)';
+      else bEl.style.backgroundColor = 'var(--primary)';
+    }
+  };
+
+  /**
+   * Render composite automated agent health scorecard tile and pillar breakdown.
+   * @param {Record<string, any>} [scorecard={}] - Scorecard metrics object.
+   */
   function renderHealthScorecard(scorecard = {}) {
     const score = Number.isFinite(scorecard.score) ? scorecard.score : 100;
     const grade = scorecard.grade || 'Optimal';
@@ -257,10 +320,10 @@
     };
 
     // 1. Overview Tile 1
-    const scoreEl = $('val-health-score');
-    const gradeEl = $('badge-health-grade');
-    const subEl = $('val-health-sub');
-    const barEl = $('bar-health-fill');
+    const scoreEl = byId('val-health-score');
+    const gradeEl = byId('badge-health-grade');
+    const subEl = byId('val-health-sub');
+    const barEl = byId('bar-health-fill');
 
     if (scoreEl) scoreEl.textContent = score;
     if (gradeEl) {
@@ -274,25 +337,15 @@
     }
 
     // 2. Health Scorecard Section Breakdown
-    const pillEl = $('scorecard-pill');
-    const descEl = $('scorecard-desc');
+    const pillEl = byId('scorecard-pill');
+    const descEl = byId('scorecard-desc');
     if (pillEl) {
       pillEl.textContent = `${grade} (${score}/100)`;
       pillEl.className = `health-pill grade-${grade.toLowerCase().replace(/\s+/g, '-')}`;
     }
     if (descEl) descEl.textContent = summary;
 
-    const setPillar = (id, val) => {
-      const vEl = $(`pillar-val-${id}`);
-      const bEl = $(`pillar-bar-${id}`);
-      if (vEl) vEl.textContent = `${val}%`;
-      if (bEl) {
-        bEl.style.width = `${Math.min(100, Math.max(0, val))}%`;
-        if (val < 60) bEl.style.backgroundColor = 'var(--destructive)';
-        else if (val < 80) bEl.style.backgroundColor = 'var(--warning)';
-        else bEl.style.backgroundColor = 'var(--primary)';
-      }
-    };
+
 
     setPillar('reliability', pillars.reliability ?? 100);
     setPillar('loop', pillars.loopRadar ?? 100);
@@ -300,12 +353,15 @@
     setPillar('context', pillars.contextEconomy ?? 100);
   }
 
-  // Render Error Root Causes Section (Overview Tab)
+  /**
+   * Render error taxonomy summary badges, distribution bar, and legend.
+   * @param {Record<string, any>} [errorTaxonomy={}] - Clustered error taxonomy mapping.
+   */
   function renderErrorTaxonomy(errorTaxonomy = {}) {
-    const sectionEl = $('error-taxonomy-section');
-    const badgeEl = $('error-taxonomy-badge');
-    const barEl = $('error-taxonomy-bar');
-    const legendEl = $('error-taxonomy-legend');
+    const sectionEl = byId('error-taxonomy-section');
+    const badgeEl = byId('error-taxonomy-badge');
+    const barEl = byId('error-taxonomy-bar');
+    const legendEl = byId('error-taxonomy-legend');
 
     if (!sectionEl || !barEl || !legendEl) return;
 
@@ -346,9 +402,12 @@
     });
   }
 
-  // Render Error Sub-Filters in Traces Pane
+  /**
+   * Render interactive error cluster filter chips in the Traces pane.
+   * @param {Record<string, any>} [errorTaxonomy={}] - Clustered error taxonomy mapping.
+   */
   function renderErrorClustersFilter(errorTaxonomy = {}) {
-    const filterEl = $('error-clusters-filter');
+    const filterEl = byId('error-clusters-filter');
     if (!filterEl) return;
 
     if (currentMode !== 'errors') {
@@ -385,6 +444,10 @@
     });
   }
 
+  /**
+   * Switch the active navigation tab pane.
+   * @param {string} tabId - Target pane element ID.
+   */
   function switchToTab(tabId) {
     document.querySelectorAll('.nav-tab').forEach(t => {
       const match = t.getAttribute('data-tab') === tabId;
@@ -397,20 +460,27 @@
     });
   }
 
+  /**
+   * Set traces filtering mode and optional error taxonomy cluster filter.
+   * @param {'all'|'tools'|'errors'} mode - Filtering mode.
+   * @param {string} [cluster='all'] - Error cluster category ID.
+   */
   function setFilterMode(mode, cluster = 'all') {
     currentMode = mode;
     selectedErrorCluster = cluster;
-    $('tab-all')?.classList.toggle('active', mode === 'all');
-    $('tab-tools')?.classList.toggle('active', mode === 'tools');
-    $('tab-errors')?.classList.toggle('active', mode === 'errors');
+    byId('tab-all')?.classList.toggle('active', mode === 'all');
+    byId('tab-tools')?.classList.toggle('active', mode === 'tools');
+    byId('tab-errors')?.classList.toggle('active', mode === 'errors');
     renderErrorClustersFilter(lastTelemetryData?.errorTaxonomy);
     renderWaterfall();
   }
 
-  // Render vertical waterfall traces preserving expanded node drawer states
+  /**
+   * Render vertical waterfall trace feed with expandable step drawers.
+   */
   function renderWaterfall() {
     if (!lastTelemetryData) return;
-    const feedEl = $('waterfall-feed');
+    const feedEl = byId('waterfall-feed');
     let items = lastTelemetryData.recentSteps || [];
 
     if (currentMode === 'errors') {
@@ -444,7 +514,7 @@
     }
 
     const totalAvailable = (lastTelemetryData.recentSteps || []).length;
-    const countLabel = $('traces-count-label');
+    const countLabel = byId('traces-count-label');
     if (countLabel) {
       countLabel.textContent = `${items.length} / ${totalAvailable}`;
     }
@@ -642,11 +712,14 @@
     }).join('');
   }
 
-  // Render Files list with event delegation
+  /**
+   * Render list of modified/accessed files with copy actions.
+   * @param {string[]} [files=[]] - Array of touched file paths.
+   */
   function renderFiles(files = []) {
-    const listEl = $('files-list');
-    const countBadge = $('tab-files-badge');
-    const summaryCount = $('files-summary-count');
+    const listEl = byId('files-list');
+    const countBadge = byId('tab-files-badge');
+    const summaryCount = byId('files-summary-count');
 
     countBadge.textContent = files.length;
     summaryCount.textContent = `${files.length} file${files.length === 1 ? '' : 's'}`;
@@ -679,7 +752,9 @@
     }).join('');
   }
 
-  // Export Session Report as Markdown
+  /**
+   * Generate and copy Markdown session trace telemetry report to clipboard.
+   */
   function copySessionReport() {
     if (!lastTelemetryData) {
       showToast('No telemetry data available');
@@ -717,7 +792,11 @@ ${fileLines}
     });
   }
 
-  // Update session dropdown only when session list actually changed
+  /**
+   * Update conversation session selector options when session list changes.
+   * @param {Array<{ id: string, title?: string, stepCount?: number }>} [sessions=[]] - Active sessions.
+   * @param {string} [activeTitle=''] - Title of active conversation.
+   */
   function updateSessionDropdown(sessions = [], activeTitle = '') {
     if (!Array.isArray(sessions) || sessions.length === 0) return;
 
@@ -727,7 +806,7 @@ ${fileLines}
     }
     lastSessionsSignature = signature;
 
-    const select = $('session-select');
+    const select = byId('session-select');
     const currentVal = selectedConversationId;
 
     const autoLabel = activeTitle ? `Auto (${activeTitle.slice(0, 24)})` : 'Auto (Active Chat)';
@@ -744,12 +823,17 @@ ${fileLines}
     select.value = currentVal;
   }
 
+  /**
+   * Fetch latest telemetry payload from sidecar API and re-render dashboard views.
+   * @param {boolean} [force=false] - Force update regardless of pause state or signature match.
+   * @returns {Promise<void>}
+   */
   async function refreshTelemetry(force = false) {
     if (!isMonitoring && !force) return;
 
     if (!sidecar) {
-      $('session-badge').textContent = 'Standalone';
-      $('session-badge').className = 'status-badge';
+      byId('session-badge').textContent = 'Standalone';
+      byId('session-badge').className = 'status-badge';
       return;
     }
 
@@ -762,9 +846,9 @@ ${fileLines}
 
       const data = await res.json();
       if (data.error && data.status === 'no_session') {
-        $('session-badge').textContent = 'Waiting';
-        $('session-badge').className = 'status-badge';
-        $('pulse-indicator').className = 'pulse-indicator';
+        byId('session-badge').textContent = 'Waiting';
+        byId('session-badge').className = 'status-badge';
+        byId('pulse-indicator').className = 'pulse-indicator';
         return;
       }
 
@@ -775,12 +859,12 @@ ${fileLines}
       }
 
       // Header Status & Pulse
-      $('session-badge').textContent = 'Live Trace';
-      $('session-badge').className = 'status-badge live';
-      $('pulse-indicator').className = 'pulse-indicator live';
+      byId('session-badge').textContent = 'Live Trace';
+      byId('session-badge').className = 'status-badge live';
+      byId('pulse-indicator').className = 'pulse-indicator live';
 
       // Header Model Badge
-      const modelBadge = $('model-badge');
+      const modelBadge = byId('model-badge');
       if (modelBadge) {
         modelBadge.textContent = data.activeModel || 'Gemini';
         modelBadge.title = `Active Model: ${data.activeModel || 'Gemini'}`;
@@ -794,11 +878,11 @@ ${fileLines}
       // 2. Active Context Window (Overview - Antigravity)
       const ctxTokens = data.latestContextTokens || 0;
       const ctxK = formatTokens(ctxTokens);
-      $('val-context').textContent = ctxK;
+      byId('val-context').textContent = ctxK;
       const ctxLoadText = data.contextLoadPercent || '0.0%';
       const ctxNumeric = parseFloat(ctxLoadText) || 0;
-      $('val-context-load').textContent = `${ctxLoadText} load`;
-      const ctxBar = $('bar-context-fill');
+      byId('val-context-load').textContent = `${ctxLoadText} load`;
+      const ctxBar = byId('bar-context-fill');
       if (ctxBar) {
         ctxBar.style.width = `${Math.min(100, ctxNumeric)}%`;
         if (ctxNumeric >= 85) {
@@ -813,16 +897,16 @@ ${fileLines}
       // 3. Token Breakdown (Overview)
       const inK = formatTokens(data.totalPromptTokens || data.inputTokens);
       const outK = formatTokens(data.outputTokens);
-      $('val-tokens').textContent = formatTokens(data.totalTokens);
-      $('val-tokens-sub').textContent = `In: ${inK} · Out: ${outK}`;
+      byId('val-tokens').textContent = formatTokens(data.totalTokens);
+      byId('val-tokens-sub').textContent = `In: ${inK} · Out: ${outK}`;
 
       // 4. Steps & Velocity (Overview & Badges)
-      $('val-steps').textContent = data.totalSteps || 0;
-      $('tab-traces-badge').textContent = data.totalSteps || 0;
+      byId('val-steps').textContent = data.totalSteps || 0;
+      byId('tab-traces-badge').textContent = data.totalSteps || 0;
       const errCount = data.errorCount || 0;
-      $('val-steps-sub').textContent = `Avg ${data.avgStepDuration || '0.0s'}/step · ${errCount} err`;
-      $('err-count-badge').textContent = errCount;
-      const errorTabBtn = $('tab-errors');
+      byId('val-steps-sub').textContent = `Avg ${data.avgStepDuration || '0.0s'}/step · ${errCount} err`;
+      byId('err-count-badge').textContent = errCount;
+      const errorTabBtn = byId('tab-errors');
       if (errCount > 0) {
         errorTabBtn.classList.add('has-errors');
       } else {
@@ -832,9 +916,9 @@ ${fileLines}
       // 5. Tools & Reliability (Overview)
       const tools = Object.entries(data.toolCounts || {});
       const totalToolsCalled = tools.reduce((sum, [, count]) => sum + count, 0);
-      $('val-tools-count').textContent = totalToolsCalled;
+      byId('val-tools-count').textContent = totalToolsCalled;
       const successRate = data.toolSuccessRate || '100%';
-      $('val-tools-distinct').textContent = `${successRate} ok · ${tools.length} distinct`;
+      byId('val-tools-distinct').textContent = `${successRate} ok · ${tools.length} distinct`;
 
       // 6. Antigravity Ecosystem (Overview)
       const subagentCalls = data.subagentCalls || 0;
@@ -854,19 +938,19 @@ ${fileLines}
       }
 
       if (subagentCalls > 0) {
-        $('val-ecosystem').textContent = `${subagentCalls} Ag · ${mcpSummary}`;
+        byId('val-ecosystem').textContent = `${subagentCalls} Ag · ${mcpSummary}`;
       } else {
-        $('val-ecosystem').textContent = mcpCalls > 0 ? mcpSummary : '0 Agents · 0 MCP';
+        byId('val-ecosystem').textContent = mcpCalls > 0 ? mcpSummary : '0 Agents · 0 MCP';
       }
 
       if (activeSkills.length > 0) {
         const skillLabel = activeSkills.length <= 2 ? activeSkills.join(', ') : `${activeSkills.length} Skills`;
-        $('val-ecosystem-sub').textContent = `${skillLabel} · ${artifactsCount} Art · ${compactionsCount} Cmp`;
+        byId('val-ecosystem-sub').textContent = `${skillLabel} · ${artifactsCount} Art · ${compactionsCount} Cmp`;
       } else {
-        $('val-ecosystem-sub').textContent = `${artifactsCount} Artifacts · ${compactionsCount} Compacted`;
+        byId('val-ecosystem-sub').textContent = `${artifactsCount} Artifacts · ${compactionsCount} Compacted`;
       }
 
-      const ecoTile = $('val-ecosystem')?.parentElement;
+      const ecoTile = byId('val-ecosystem')?.parentElement;
       if (ecoTile) {
         const srvDetails = serverEntries.length > 0 ? serverEntries.map(([s, c]) => `${s}: ${c}`).join(', ') : 'None';
         const sklDetails = activeSkills.length > 0 ? activeSkills.join(', ') : 'None';
@@ -874,14 +958,14 @@ ${fileLines}
       }
 
       // 7. Loop Warning Alert
-      const loopBanner = $('loop-banner');
+      const loopBanner = byId('loop-banner');
       if (data.loopDetected) {
         loopBanner.classList.add('active');
         if (data.loopDetected.similarity) {
-          $('loop-details').textContent =
+          byId('loop-details').textContent =
             data.loopDetected.description || `Repetitive ${data.loopDetected.tool || 'action'} detected (${Math.round(data.loopDetected.similarity * 100)}% similarity).`;
         } else {
-          $('loop-details').textContent =
+          byId('loop-details').textContent =
             `Tool "${data.loopDetected.tool}" has executed ${data.loopDetected.repetitions} times consecutively with identical arguments.`;
         }
       } else {
@@ -906,35 +990,45 @@ ${fileLines}
 
     } catch (err) {
       console.warn('Telemetry poll error:', err);
-      $('session-badge').textContent = 'Disconnected';
-      $('session-badge').className = 'status-badge has-errors';
-      $('pulse-indicator').className = 'pulse-indicator';
+      byId('session-badge').textContent = 'Disconnected';
+      byId('session-badge').className = 'status-badge has-errors';
+      byId('pulse-indicator').className = 'pulse-indicator';
     }
   }
 
+  /**
+   * Switch the active navigation tab and display its pane.
+   * @param {HTMLElement} targetBtn - Target nav-tab button element.
+   */
+  function selectTab(targetBtn) {
+    if (!targetBtn) return;
+    const tabButtons = Array.from(document.querySelectorAll('.nav-tab'));
+    tabButtons.forEach(b => {
+      b.classList.remove('active');
+      b.setAttribute('aria-selected', 'false');
+      b.setAttribute('tabindex', '-1');
+    });
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+
+    targetBtn.classList.add('active');
+    targetBtn.setAttribute('aria-selected', 'true');
+    targetBtn.setAttribute('tabindex', '0');
+    targetBtn.focus();
+
+    const targetPaneId = targetBtn.getAttribute('data-tab');
+    const targetPane = byId(targetPaneId);
+    if (targetPane) {
+      targetPane.classList.add('active');
+    }
+  }
+
+  /**
+   * Bind event listeners for tab switching, steering form, and filter controls.
+   */
   function setupTabsAndControls() {
     const tabButtons = Array.from(document.querySelectorAll('.nav-tab'));
 
-    function selectTab(targetBtn) {
-      if (!targetBtn) return;
-      tabButtons.forEach(b => {
-        b.classList.remove('active');
-        b.setAttribute('aria-selected', 'false');
-        b.setAttribute('tabindex', '-1');
-      });
-      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
 
-      targetBtn.classList.add('active');
-      targetBtn.setAttribute('aria-selected', 'true');
-      targetBtn.setAttribute('tabindex', '0');
-      targetBtn.focus();
-
-      const targetPaneId = targetBtn.getAttribute('data-tab');
-      const targetPane = $(targetPaneId);
-      if (targetPane) {
-        targetPane.classList.add('active');
-      }
-    }
 
     // Tab click switching & keyboard navigation
     tabButtons.forEach((tabBtn, idx) => {
@@ -960,7 +1054,7 @@ ${fileLines}
     });
 
     // Event delegation on #waterfall-feed to toggle drawer expansion & copy output snippets
-    $('waterfall-feed').addEventListener('click', (e) => {
+    byId('waterfall-feed').addEventListener('click', (e) => {
       const copyBtn = e.target.closest('.btn-copy-mini');
       if (copyBtn) {
         e.stopPropagation();
@@ -986,7 +1080,7 @@ ${fileLines}
     });
 
     // Event delegation on #files-list to copy file paths safely
-    $('files-list').addEventListener('click', (e) => {
+    byId('files-list').addEventListener('click', (e) => {
       const btn = e.target.closest('.btn-copy-path');
       if (!btn) return;
       const filePath = btn.getAttribute('data-path');
@@ -998,51 +1092,51 @@ ${fileLines}
     });
 
     // Quick action steering buttons
-    $('btn-pause').addEventListener('click', () => {
+    byId('btn-pause').addEventListener('click', () => {
       sendSteerMessage('Please pause your current edits and explain your current reasoning and plan.');
     });
 
-    $('btn-tests').addEventListener('click', () => {
+    byId('btn-tests').addEventListener('click', () => {
       sendSteerMessage('Please run the project test suite now to verify recent changes.');
     });
 
-    $('btn-review').addEventListener('click', () => {
+    byId('btn-review').addEventListener('click', () => {
       sendSteerMessage('Please review recently modified files for any syntax, lint, or regression errors.');
     });
 
-    $('btn-send-steer').addEventListener('click', () => {
-      sendSteerMessage($('steer-input').value);
+    byId('btn-send-steer').addEventListener('click', () => {
+      sendSteerMessage(byId('steer-input').value);
     });
 
-    $('steer-input').addEventListener('keydown', (e) => {
+    byId('steer-input').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        sendSteerMessage($('steer-input').value);
+        sendSteerMessage(byId('steer-input').value);
       }
     });
 
     // Session report button
-    $('btn-copy-report').addEventListener('click', copySessionReport);
+    byId('btn-copy-report').addEventListener('click', copySessionReport);
 
     // Filter tabs inside Traces
-    $('tab-all').addEventListener('click', () => {
+    byId('tab-all').addEventListener('click', () => {
       setFilterMode('all');
     });
 
-    $('tab-tools')?.addEventListener('click', () => {
+    byId('tab-tools')?.addEventListener('click', () => {
       setFilterMode('tools');
     });
 
-    $('tab-errors').addEventListener('click', () => {
+    byId('tab-errors').addEventListener('click', () => {
       setFilterMode('errors');
     });
 
-    $('btn-view-all-errors')?.addEventListener('click', () => {
+    byId('btn-view-all-errors')?.addEventListener('click', () => {
       switchToTab('pane-traces');
       setFilterMode('errors', 'all');
     });
 
     // Traces Search Input
-    const traceSearchEl = $('trace-search-input');
+    const traceSearchEl = byId('trace-search-input');
     if (traceSearchEl) {
       traceSearchEl.addEventListener('input', (e) => {
         traceSearchQuery = e.target.value.trim();
@@ -1051,7 +1145,7 @@ ${fileLines}
     }
 
     // Expand/Collapse All Traces Toggle
-    const btnExpandAll = $('btn-toggle-expand-all');
+    const btnExpandAll = byId('btn-toggle-expand-all');
     if (btnExpandAll) {
       btnExpandAll.addEventListener('click', () => {
         const displayedNodes = Array.from(document.querySelectorAll('#waterfall-feed .waterfall-node'));
@@ -1075,13 +1169,13 @@ ${fileLines}
     }
 
     // Session selector dropdown
-    $('session-select').addEventListener('change', (e) => {
+    byId('session-select').addEventListener('change', (e) => {
       selectedConversationId = e.target.value;
       refreshTelemetry(true);
     });
 
     // Manual telemetry refresh button
-    const refreshBtn = $('btn-refresh');
+    const refreshBtn = byId('btn-refresh');
     if (refreshBtn) {
       refreshBtn.addEventListener('click', async () => {
         refreshBtn.classList.add('spinning');
@@ -1097,15 +1191,18 @@ ${fileLines}
     }
 
     // Power On/Off monitoring toggle
-    $('btn-toggle-monitor').addEventListener('click', toggleMonitoring);
+    byId('btn-toggle-monitor').addEventListener('click', toggleMonitoring);
   }
 
+  /**
+   * Toggle real-time background telemetry polling on or off.
+   */
   function toggleMonitoring() {
     isMonitoring = !isMonitoring;
-    const btn = $('btn-toggle-monitor');
-    const txt = $('power-text');
-    const badge = $('session-badge');
-    const pulse = $('pulse-indicator');
+    const btn = byId('btn-toggle-monitor');
+    const txt = byId('power-text');
+    const badge = byId('session-badge');
+    const pulse = byId('pulse-indicator');
 
     if (isMonitoring) {
       btn.classList.add('active');
@@ -1132,7 +1229,43 @@ ${fileLines}
     }
   }
 
-  setupTabsAndControls();
-  refreshTelemetry(true);
-  monitorInterval = setInterval(refreshTelemetry, 2500);
+  // Auto-run when in real browser environment
+  if (typeof window !== 'undefined' && typeof document !== 'undefined' && typeof window.addEventListener === 'function' && !globalThis.__IS_HEADLESS_TEST__) {
+    setupTabsAndControls();
+    refreshTelemetry(true);
+    monitorInterval = setInterval(refreshTelemetry, 2500);
+  }
+
+  // Export panel API for testing and diagnostics
+  const panelApi = {
+    byId,
+    showToast,
+    formatTokens,
+    escapeHtml,
+    getToolCategory,
+    sendSteerMessage,
+    renderToolSpectrum,
+    renderCognitiveSpectrum,
+    renderHealthScorecard,
+    setPillar,
+    renderErrorTaxonomy,
+    renderErrorClustersFilter,
+    switchToTab,
+    setFilterMode,
+    renderWaterfall,
+    renderFiles,
+    copySessionReport,
+    updateSessionDropdown,
+    refreshTelemetry,
+    setupTabsAndControls,
+    selectTab,
+    toggleMonitoring,
+  };
+
+  if (typeof globalThis !== 'undefined') {
+    globalThis.__observabilityPanel = panelApi;
+  }
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = panelApi;
+  }
 })();
