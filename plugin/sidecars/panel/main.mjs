@@ -34,9 +34,12 @@ const app = new SidecarApp();
 
 const readLocal = (name) => readFileSync(join(HERE, name), 'utf8');
 
+// Security headers for static assets.
+// Note: X-Frame-Options is intentionally omitted because the sidecar UI is rendered
+// inside an iframe in the Antigravity IDE auxiliary webview pane. Setting X-Frame-Options
+// blocks the parent IDE window from embedding the panel, resulting in a blank screen.
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
-  'X-Frame-Options': 'SAMEORIGIN',
 };
 
 // Static file routes with security headers

@@ -95,10 +95,10 @@ runTest('CI workflow restricts GITHUB_TOKEN permissions to read-only', () => {
   assert.ok(/permissions:\s*[\r\n]+\s*contents:\s*read/.test(ciYaml), 'Missing read-only permissions in ci.yml');
 });
 
-runTest('sidecar main.mjs injects HTTP security headers on static responses', () => {
+runTest('sidecar main.mjs injects HTTP security headers and permits IDE iframe embedding', () => {
   const code = readFileSync(join(PLUGIN, 'sidecars/panel/main.mjs'), 'utf8');
   assert.ok(code.includes("'X-Content-Type-Options': 'nosniff'"), 'Missing X-Content-Type-Options');
-  assert.ok(code.includes("'X-Frame-Options': 'SAMEORIGIN'"), 'Missing X-Frame-Options');
+  assert.ok(!code.includes("'X-Frame-Options'"), 'X-Frame-Options must not be set as it breaks IDE iframe embedding');
   assert.ok(code.includes("new Response(readLocal('index.html')"), 'index.html not wrapped in Response with headers');
 });
 
