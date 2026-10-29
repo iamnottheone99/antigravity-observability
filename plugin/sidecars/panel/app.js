@@ -1020,6 +1020,10 @@ ${fileLines}
     if (targetPane) {
       targetPane.classList.add('active');
     }
+    if (targetPaneId === 'pane-system') {
+      fetchQuotaData(false);
+      fetchCacheData(false);
+    }
   }
 
   /**
@@ -1181,7 +1185,9 @@ ${fileLines}
         refreshBtn.classList.add('spinning');
         try {
           await refreshTelemetry(true);
-          showToast('Telemetry refreshed');
+          await fetchQuotaData(true);
+          await fetchCacheData(true);
+          showToast('Telemetry & Quota refreshed');
         } catch {
           showToast('Refresh failed');
         } finally {
@@ -1190,8 +1196,442 @@ ${fileLines}
       });
     }
 
+    // Quota and Cache event handlers
+    const refreshQuotaBtn = byId('btn-refresh-quota');
+    if (refreshQuotaBtn) {
+      refreshQuotaBtn.addEventListener('click', async () => {
+        showToast('Refreshing quota...');
+        await fetchQuotaData(true);
+      });
+    }
+
+    const refreshCacheBtn = byId('btn-refresh-cache');
+    if (refreshCacheBtn) {
+      refreshCacheBtn.addEventListener('click', async () => {
+        showToast('Refreshing storage...');
+        await fetchCacheData(true);
+      });
+    }
+
+    const pruneStaleBtn = byId('btn-prune-stale');
+    if (pruneStaleBtn) {
+      pruneStaleBtn.addEventListener('click', async () => {
+        await pruneStaleSessions(10);
+      });
+    }
+
+    const cacheFeed = byId('cache-tasks-feed');
+    if (cacheFeed) {
+      cacheFeed.addEventListener('click', async (e) => {
+        const delBtn = e.target.closest('.cache-task-delete-btn');
+        if (delBtn) {
+          const taskId = delBtn.getAttribute('data-task-id');
+          if (taskId) {
+            await deleteCacheTask(taskId);
+          }
+        }
+      });
+    }
+
     // Power On/Off monitoring toggle
     byId('btn-toggle-monitor').addEventListener('click', toggleMonitoring);
+  }
+
+  /**
+   * Format ISO reset timestamp into a concise countdown string.
+   * @param {string|null} isoString - Target reset ISO string.
+   * @returns {string} Human-friendly countdown (e.g. "1d 4h", "45m", "N/A").
+   */
+  function formatRelativeTime(isoString) {
+    if (!isoString) return 'N/A';
+    const target = new Date(isoString).getTime();
+    if (isNaN(target)) return 'N/A';
+    const diff = target - Date.now();
+    if (diff <= 0) return 'Ready';
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours >= 24) {
+      const days = Math.floor(hours / 24);
+      const remHours = hours % 24;
+      return `${days}d ${remHours}h`;
+    }
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
+  }
+
+  /**
+   * Render language server model quota progress bars and rate limits.
+   * @param {object} quotaData - Quota payload returned by /api/quota.
+   */
+  function renderQuotaSummary(quotaData) {
+    if (!quotaData) return;
+
+    const planPill = byId('quota-plan-pill');
+    const promptCreditsEl = byId('quota-prompt-credits');
+    const flowCreditsEl = byId('quota-flow-credits');
+    const barsGrid = byId('quota-bars-grid');
+    const detailsContainer = byId('quota-details-container');
+    const lsStatusBadge = byId('ls-status-badge');
+
+    if (quotaData.status === 'unavailable') {
+      if (lsStatusBadge) {
+        lsStatusBadge.textContent = 'Standalone Mode (Offline)';
+        lsStatusBadge.className = 'badge-status-offline';
+      }
+      if (barsGrid) {
+        barsGrid.innerHTML = '<div class="quota-empty-state">Language server offline or standalone environment.</div>';
+      }
+      if (detailsContainer) {
+        detailsContainer.innerHTML = '<div class="quota-empty-state">Language server connection inactive. Quota tracking is available when connected to Antigravity IDE.</div>';
+      }
+      return;
+    }
+
+    if (lsStatusBadge) {
+      lsStatusBadge.textContent = 'Language Server Connected';
+      lsStatusBadge.className = 'badge-status-connected';
+    }
+
+    // User Profile and Plan
+    const user = quotaData.user || {};
+    if (planPill) {
+      planPill.textContent = user.plan || 'Pro';
+    }
+    if (promptCreditsEl) {
+      const promptAvail = user.availablePromptCredits !== null ? formatTokens(user.availablePromptCredits) : '--';
+      promptCreditsEl.textContent = `${promptAvail} Credits`;
+      promptCreditsEl.title = `Available Prompt Credits: ${user.availablePromptCredits ?? 'Unlimited'}`;
+    }
+    if (flowCreditsEl) {
+      const flowAvail = user.availableFlowCredits !== null ? formatTokens(user.availableFlowCredits) : '--';
+      flowCreditsEl.textContent = `${flowAvail} Flow`;
+      flowCreditsEl.title = `Available Flow Credits: ${user.availableFlowCredits ?? 'Unlimited'}`;
+    }
+
+    // Overview snapshot bars
+    if (barsGrid) {
+      const groups = quotaData.groups || [];
+      const buckets = [];
+      for (const g of groups) {
+        if (Array.isArray(g.buckets)) {
+          buckets.push(...g.buckets);
+        }
+      }
+
+      if (buckets.length === 0) {
+        barsGrid.innerHTML = '<div class="quota-empty-state">No active quota buckets reported.</div>';
+      } else {
+        let cardsHtml = '';
+        for (const b of buckets) {
+          const pct = b.remainingPercent ?? Math.round((b.remainingFraction || 0) * 100);
+          const fillCls = pct > 50 ? 'high' : (pct > 20 ? 'medium' : 'low');
+          const resetLabel = formatRelativeTime(b.resetTime);
+          const nameClean = b.name.replace(/ Limit Remaining/i, '').replace(/ Remaining/i, '');
+
+          cardsHtml += `
+            <div class="quota-bucket-card" title="${escapeHtml(b.description || b.name)}">
+              <div class="quota-bucket-top">
+                <span class="quota-bucket-name">${escapeHtml(nameClean)}</span>
+                <span class="quota-bucket-val tabular mono">${pct}%</span>
+              </div>
+              <div class="quota-bucket-bar">
+                <div class="quota-bucket-fill ${fillCls}" style="width: ${pct}%;"></div>
+              </div>
+              <div class="quota-bucket-reset tabular mono">Reset: ${escapeHtml(resetLabel)}</div>
+            </div>
+          `;
+        }
+        barsGrid.innerHTML = cardsHtml;
+      }
+    }
+
+    // System Details Pane
+    if (detailsContainer) {
+      let detailsHtml = '';
+
+      // Group cards
+      const groups = quotaData.groups || [];
+      for (const g of groups) {
+        detailsHtml += `
+          <div class="quota-group-card">
+            <div class="quota-group-header">
+              <span class="quota-group-title">${escapeHtml(g.name)}</span>
+              <span class="quota-group-desc">${escapeHtml(g.description)}</span>
+            </div>
+            <div class="quota-bars-grid">
+        `;
+
+        for (const b of g.buckets || []) {
+          const pct = b.remainingPercent ?? Math.round((b.remainingFraction || 0) * 100);
+          const fillCls = pct > 50 ? 'high' : (pct > 20 ? 'medium' : 'low');
+          const resetLabel = formatRelativeTime(b.resetTime);
+          detailsHtml += `
+            <div class="quota-bucket-card" title="${escapeHtml(b.description)}">
+              <div class="quota-bucket-top">
+                <span class="quota-bucket-name">${escapeHtml(b.name)}</span>
+                <span class="quota-bucket-val tabular mono">${pct}%</span>
+              </div>
+              <div class="quota-bucket-bar">
+                <div class="quota-bucket-fill ${fillCls}" style="width: ${pct}%;"></div>
+              </div>
+              <div class="quota-bucket-reset tabular mono">Reset: ${escapeHtml(resetLabel)}</div>
+            </div>
+          `;
+        }
+
+        detailsHtml += `
+            </div>
+          </div>
+        `;
+      }
+
+      // Models Table
+      const models = quotaData.models || [];
+      if (models.length > 0) {
+        detailsHtml += `
+          <div class="quota-group-card" style="margin-top: 10px;">
+            <div class="quota-group-header">
+              <span class="quota-group-title">Active Model Quotas</span>
+              <span class="quota-group-desc">${models.length} client models</span>
+            </div>
+            <table class="quota-models-table">
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Quota Remaining</th>
+                  <th>Reset Time</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        for (const m of models) {
+          const pct = m.remainingPercent ?? Math.round((m.remainingFraction || 0) * 100);
+          const fillCls = pct > 50 ? 'high' : (pct > 20 ? 'medium' : 'low');
+          const resetLabel = formatRelativeTime(m.resetTime);
+          detailsHtml += `
+            <tr>
+              <td>
+                <div style="font-weight: 600;">${escapeHtml(m.label)}</div>
+                <div style="font-size: 9px; color: var(--muted-foreground);">${escapeHtml(m.modelId)}</div>
+              </td>
+              <td>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="tabular mono" style="font-weight: 700; width: 36px;">${pct}%</span>
+                  <div class="quota-bucket-bar" style="width: 70px;">
+                    <div class="quota-bucket-fill ${fillCls}" style="width: ${pct}%;"></div>
+                  </div>
+                </div>
+              </td>
+              <td class="tabular mono" style="color: var(--muted-foreground); font-size: 9.5px;">
+                ${escapeHtml(resetLabel)}
+              </td>
+            </tr>
+          `;
+        }
+
+        detailsHtml += `
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      detailsContainer.innerHTML = detailsHtml || '<div class="quota-empty-state">No detailed quota limits found.</div>';
+    }
+  }
+
+  /**
+   * Render storage footprint breakdown and brain cache sessions list.
+   * @param {object} cacheData - Cache payload returned by /api/cache.
+   */
+  function renderCacheManager(cacheData) {
+    if (!cacheData || cacheData.status !== 'ok') return;
+
+    const summary = cacheData.summary || {};
+    const tasks = cacheData.tasks || [];
+
+    const valTotal = byId('val-storage-total');
+    const valBrain = byId('val-storage-brain');
+    const valBrainCount = byId('val-storage-brain-count');
+    const valConversations = byId('val-storage-conversations');
+    const valRecordings = byId('val-storage-recordings');
+    const tasksCountEl = byId('cache-tasks-count');
+    const tasksFeedEl = byId('cache-tasks-feed');
+
+    if (valTotal) valTotal.textContent = summary.totalFormatted || '0 B';
+    if (valBrain) valBrain.textContent = summary.brainFormatted || '0 B';
+    if (valBrainCount) valBrainCount.textContent = `${summary.brainTasksCount || tasks.length} sessions`;
+    if (valConversations) valConversations.textContent = summary.conversationsFormatted || '0 B';
+    if (valRecordings) valRecordings.textContent = summary.recordingsFormatted || '0 B';
+    if (tasksCountEl) tasksCountEl.textContent = `${tasks.length} sessions`;
+
+    if (!tasksFeedEl) return;
+
+    if (tasks.length === 0) {
+      tasksFeedEl.innerHTML = '<div class="cache-empty-state">No stored brain sessions found on disk.</div>';
+      return;
+    }
+
+    const activeId = selectedConversationId === 'auto'
+      ? (lastTelemetryData?.conversationId || '')
+      : selectedConversationId;
+
+    let feedHtml = '';
+    for (const t of tasks) {
+      const isCurrent = t.id === activeId;
+      const dateStr = t.mtime ? new Date(t.mtime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+      const badgeCurrent = isCurrent ? '<span class="status-badge live" style="font-size: 8.5px; padding: 1px 4px;">ACTIVE</span>' : '';
+
+      feedHtml += `
+        <div class="cache-task-item" data-task-id="${escapeHtml(t.id)}">
+          <div class="cache-task-info">
+            <div class="cache-task-title" title="${escapeHtml(t.title)}">
+              ${badgeCurrent} ${escapeHtml(t.title)}
+            </div>
+            <div class="cache-task-meta tabular mono">
+              <span>${escapeHtml(t.id.slice(0, 8))}...</span>
+              <span>&bull;</span>
+              <span style="font-weight: 600; color: var(--foreground);">${escapeHtml(t.sizeFormatted)}</span>
+              <span>&bull;</span>
+              <span>${escapeHtml(dateStr)}</span>
+            </div>
+          </div>
+          <button class="cache-task-delete-btn" type="button" data-task-id="${escapeHtml(t.id)}" ${isCurrent ? 'disabled title="Cannot delete active session"' : 'title="Delete session cache"'}>
+            Delete
+          </button>
+        </div>
+      `;
+    }
+
+    tasksFeedEl.innerHTML = feedHtml;
+  }
+
+  /**
+   * Helper to perform GET request against sidecar API endpoints.
+   * @param {string} endpoint - API path.
+   * @param {boolean} [force=false] - Whether to bypass cache.
+   * @returns {Promise<object>} Parsed JSON response.
+   */
+  async function fetchEndpoint(endpoint, force = false) {
+    const url = `${endpoint}${force ? '?force=true' : ''}`;
+    const res = sidecar ? await sidecar.fetch(url) : await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.statusCode || res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Helper to perform POST mutation against cache management API.
+   * @param {object} payload - Action parameters.
+   * @returns {Promise<object>} Action result.
+   */
+  async function postCacheAction(payload) {
+    const res = sidecar
+      ? await sidecar.fetch('/api/cache', { method: 'POST', body: JSON.stringify(payload) })
+      : await fetch('/api/cache', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    return await res.json();
+  }
+
+  /**
+   * Fetch and render either quota or storage metrics.
+   * @param {'quota'|'cache'} type - Target endpoint category.
+   * @param {boolean} [force=false] - Whether to bypass server cache.
+   * @returns {Promise<object>} Response payload.
+   */
+  async function fetchResource(type, force = false) {
+    try {
+      const data = await fetchEndpoint(`/api/${type}`, force);
+      if (type === 'quota') renderQuotaSummary(data);
+      else renderCacheManager(data);
+      return data;
+    } catch (err) {
+      console.warn(`Failed to fetch ${type} data:`, err);
+      const fallback = type === 'quota'
+        ? { status: 'unavailable', message: err.message }
+        : { status: 'error', error: err.message };
+      if (type === 'quota') renderQuotaSummary(fallback);
+      return fallback;
+    }
+  }
+
+  /**
+   * Request real-time model quota metrics from sidecar backend.
+   * @param {boolean} [force=false] - Whether to bypass server cache.
+   * @returns {Promise<object>} Quota payload.
+   */
+  const fetchQuotaData = (force = false) => fetchResource('quota', force);
+
+  /**
+   * Request disk cache footprint and session list from sidecar backend.
+   * @param {boolean} [force=false] - Whether to bypass server cache.
+   * @returns {Promise<object>} Cache payload.
+   */
+  const fetchCacheData = (force = false) => fetchResource('cache', force);
+
+  /**
+   * Execute cache pruning to remove older sessions and reclaim disk space.
+   * @param {number} [keepCount=10] - Number of most recent sessions to preserve.
+   * @returns {Promise<object>} Prune result status.
+   */
+  async function pruneStaleSessions(keepCount = 10) {
+    try {
+      const activeId = selectedConversationId === 'auto'
+        ? (lastTelemetryData?.conversationId || '')
+        : selectedConversationId;
+
+      const result = await postCacheAction({
+        action: 'prune_stale',
+        keepCount,
+        activeConversationId: activeId,
+      });
+
+      if (result.status === 'ok') {
+        showToast(`Pruned ${result.deletedCount} sessions (Freed ${result.freedFormatted})`);
+        await fetchCacheData(true);
+      } else {
+        showToast(`Prune failed: ${result.error || 'Unknown error'}`);
+      }
+      return result;
+    } catch (err) {
+      showToast(`Prune failed: ${err.message}`);
+      return { status: 'error', error: err.message };
+    }
+  }
+
+  /**
+   * Remove an individual session cache directory and associated database records.
+   * @param {string} taskId - Target session UUID.
+   * @returns {Promise<object>} Deletion result status.
+   */
+  async function deleteCacheTask(taskId) {
+    if (!taskId) return { status: 'error', error: 'Missing task ID' };
+    try {
+      const activeId = selectedConversationId === 'auto'
+        ? (lastTelemetryData?.conversationId || '')
+        : selectedConversationId;
+
+      if (taskId === activeId) {
+        showToast('Cannot delete currently active session');
+        return { status: 'error', error: 'Cannot delete active session' };
+      }
+
+      const result = await postCacheAction({
+        action: 'delete_task',
+        taskId,
+        activeConversationId: activeId,
+      });
+
+      if (result.status === 'ok') {
+        showToast(`Session deleted (Freed ${result.freedFormatted})`);
+        await fetchCacheData(true);
+      } else {
+        showToast(`Delete failed: ${result.error || 'Unknown error'}`);
+      }
+      return result;
+    } catch (err) {
+      showToast(`Delete failed: ${err.message}`);
+      return { status: 'error', error: err.message };
+    }
   }
 
   /**
@@ -1233,6 +1673,8 @@ ${fileLines}
   if (typeof window !== 'undefined' && typeof document !== 'undefined' && typeof window.addEventListener === 'function' && !globalThis.__IS_HEADLESS_TEST__) {
     setupTabsAndControls();
     refreshTelemetry(true);
+    fetchQuotaData(false);
+    fetchCacheData(false);
     monitorInterval = setInterval(refreshTelemetry, 2500);
   }
 
@@ -1260,6 +1702,16 @@ ${fileLines}
     setupTabsAndControls,
     selectTab,
     toggleMonitoring,
+    formatRelativeTime,
+    renderQuotaSummary,
+    renderCacheManager,
+    fetchEndpoint,
+    postCacheAction,
+    fetchResource,
+    fetchQuotaData,
+    fetchCacheData,
+    pruneStaleSessions,
+    deleteCacheTask,
   };
 
   if (typeof globalThis !== 'undefined') {

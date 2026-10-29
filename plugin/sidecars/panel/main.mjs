@@ -1,4 +1,5 @@
-import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync } from 'node:fs';
+import http from 'node:http';
 import { homedir, platform, release } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,8 +21,13 @@ try {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STARTED_AT = Date.now();
-const BRAIN_DIR = join(homedir(), '.gemini', 'antigravity', 'brain');
-const DB_PATH = join(homedir(), '.gemini', 'antigravity', 'conversation_summaries.db');
+const ANTIGRAVITY_BASE = join(homedir(), '.gemini', 'antigravity');
+const BRAIN_DIR = join(ANTIGRAVITY_BASE, 'brain');
+const CONVERSATIONS_DIR = join(ANTIGRAVITY_BASE, 'conversations');
+const RECORDINGS_DIR = join(ANTIGRAVITY_BASE, 'browser_recordings');
+const CACHE_DIR = join(ANTIGRAVITY_BASE, 'cache');
+const DB_PATH = join(ANTIGRAVITY_BASE, 'conversation_summaries.db');
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // In-memory caches to eliminate synchronous disk churn during 2.5s polling
 let cachedSessions = null;
@@ -29,6 +35,14 @@ let sessionsCacheExpiry = 0;
 const SESSIONS_TTL_MS = 5000; // 5-second session listing TTL
 const TRANSCRIPT_TTL_MS = 60000; // 60-second transcript cache TTL
 const transcriptCache = new Map(); // conversationId -> { mtimeMs, size, report, expiresAt }
+
+let cachedQuota = null;
+let quotaCacheExpiry = 0;
+const QUOTA_TTL_MS = 15000; // 15-second quota cache TTL
+
+let cachedCacheInfo = null;
+let cacheInfoExpiry = 0;
+const CACHE_INFO_TTL_MS = 5000; // 5-second cache info TTL
 
 const app = new SidecarApp();
 
@@ -50,7 +64,7 @@ app.api('/styles.css', () => new Response(readLocal('styles.css'), { contentType
 // System status
 app.api('/api/status', () => ({
   status: 'ok',
-  version: '1.4.0',
+  version: '1.5.0',
   node: process.version,
   platform: `${platform()} ${release()}`,
   uptimeSeconds: Math.round((Date.now() - STARTED_AT) / 1000),
@@ -284,5 +298,475 @@ app.api('/api/telemetry', (params) => {
 
   return parsed;
 }, 'GET');
+
+/**
+ * Recursively calculate total size in bytes of a directory tree.
+ * @param {string} dirPath - Absolute directory path.
+ * @param {number} [maxDepth=6] - Maximum recursion depth to prevent cyclic links.
+ * @returns {number} Cumulative size in bytes.
+ */
+function getDirectorySize(dirPath, maxDepth = 6) {
+  if (maxDepth <= 0 || !existsSync(dirPath)) return 0;
+  let total = 0;
+  try {
+    const entries = readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const fullPath = join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        total += getDirectorySize(fullPath, maxDepth - 1);
+      } else if (entry.isFile()) {
+        try {
+          total += statSync(fullPath).size;
+        } catch {
+          // ignore vanishing files
+        }
+      }
+    }
+  } catch {
+    // ignore unreadable directory
+  }
+  return total;
+}
+
+/**
+ * Convert byte values into human-readable units (B, KB, MB, GB).
+ * @param {number} bytes - Raw byte count.
+ * @returns {string} Formatted size string.
+ */
+function formatBytes(bytes) {
+  if (!bytes || isNaN(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const val = bytes / Math.pow(1024, i);
+  return `${val.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+/**
+ * Retrieve comprehensive storage breakdown and brain task list.
+ * @param {boolean} [force=false] - Whether to bypass memory cache.
+ * @returns {object} Cache storage metrics and task listings.
+ */
+function getBrainCacheInfo(force = false) {
+  const now = Date.now();
+  if (!force && cachedCacheInfo && now < cacheInfoExpiry) {
+    return cachedCacheInfo;
+  }
+
+  // Load known titles from conversation_summaries.db
+  const titleMap = new Map();
+  if (DatabaseSync && existsSync(DB_PATH)) {
+    let db = null;
+    try {
+      db = new DatabaseSync(DB_PATH, { open: true, readOnly: true });
+      const rows = db.prepare('SELECT conversation_id, title, preview FROM conversation_summaries').all();
+      for (const r of rows) {
+        const t = (r.title || '').trim() || (r.preview || '').trim().slice(0, 48);
+        if (t) titleMap.set(r.conversation_id, t);
+      }
+    } catch {
+      // fallback if db locked or read fails
+    } finally {
+      if (db) {
+        try { db.close(); } catch {}
+      }
+    }
+  }
+
+  const tasks = [];
+  let brainBytes = 0;
+
+  if (existsSync(BRAIN_DIR)) {
+    try {
+      const entries = readdirSync(BRAIN_DIR, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory() || !UUID_REGEX.test(entry.name)) continue;
+        const taskPath = join(BRAIN_DIR, entry.name);
+        const taskSize = getDirectorySize(taskPath);
+        brainBytes += taskSize;
+
+        let title = titleMap.get(entry.name) || '';
+        if (!title) {
+          const taskMd = join(taskPath, 'task.md');
+          if (existsSync(taskMd)) {
+            try {
+              const firstLine = readFileSync(taskMd, 'utf8').split('\n')[0].trim();
+              if (firstLine.startsWith('#')) {
+                title = firstLine.replace(/^#+\s*/, '').trim();
+              } else if (firstLine) {
+                title = firstLine.slice(0, 48);
+              }
+            } catch {}
+          }
+        }
+        if (!title) {
+          title = `Session ${entry.name.slice(0, 8)}`;
+        }
+
+        let mtime = 0;
+        try {
+          mtime = statSync(taskPath).mtimeMs;
+        } catch {}
+
+        tasks.push({
+          id: entry.name,
+          title,
+          sizeBytes: taskSize,
+          sizeFormatted: formatBytes(taskSize),
+          mtime,
+        });
+      }
+      tasks.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+    } catch (err) {
+      console.warn('Failed to scan brain directory:', err.message);
+    }
+  }
+
+  const conversationsBytes = existsSync(CONVERSATIONS_DIR) ? getDirectorySize(CONVERSATIONS_DIR) : 0;
+  const recordingsBytes = existsSync(RECORDINGS_DIR) ? getDirectorySize(RECORDINGS_DIR) : 0;
+  const tempBytes = existsSync(CACHE_DIR) ? getDirectorySize(CACHE_DIR) : 0;
+  const totalBytes = brainBytes + conversationsBytes + recordingsBytes + tempBytes;
+
+  const summary = {
+    totalBytes,
+    totalFormatted: formatBytes(totalBytes),
+    brainBytes,
+    brainFormatted: formatBytes(brainBytes),
+    brainTasksCount: tasks.length,
+    conversationsBytes,
+    conversationsFormatted: formatBytes(conversationsBytes),
+    recordingsBytes,
+    recordingsFormatted: formatBytes(recordingsBytes),
+    tempBytes,
+    tempFormatted: formatBytes(tempBytes),
+  };
+
+  const result = {
+    status: 'ok',
+    summary,
+    tasks,
+    updatedAt: now,
+  };
+
+  cachedCacheInfo = result;
+  cacheInfoExpiry = now + CACHE_INFO_TTL_MS;
+  return result;
+}
+
+/**
+ * Safely prune stale sessions or delete individual cache tasks.
+ * @param {object} params - Action parameters.
+ * @returns {object} Action execution status.
+ */
+function handleCacheAction(params = {}) {
+  const action = params.action;
+  const activeId = params.activeConversationId || process.env.ANTIGRAVITY_CONVERSATION_ID || '';
+
+  if (action === 'prune_stale') {
+    const keepCount = Math.max(1, parseInt(params.keepCount, 10) || 10);
+    const info = getBrainCacheInfo(true);
+    const toDelete = info.tasks.slice(keepCount).filter(t => t.id !== activeId);
+
+    let freedBytes = 0;
+    let deletedCount = 0;
+
+    for (const t of toDelete) {
+      if (!UUID_REGEX.test(t.id)) continue;
+      const taskDir = join(BRAIN_DIR, t.id);
+      try {
+        if (existsSync(taskDir)) {
+          rmSync(taskDir, { recursive: true, force: true });
+          freedBytes += t.sizeBytes;
+          deletedCount += 1;
+        }
+      } catch (err) {
+        console.warn(`Failed to remove stale task ${t.id}:`, err.message);
+      }
+
+      // Also clean matching files in conversations/
+      if (existsSync(CONVERSATIONS_DIR)) {
+        for (const ext of ['.pb', '.db', '.db-wal', '.db-shm']) {
+          const convFile = join(CONVERSATIONS_DIR, `${t.id}${ext}`);
+          try {
+            if (existsSync(convFile)) {
+              const sz = statSync(convFile).size;
+              rmSync(convFile, { force: true });
+              freedBytes += sz;
+            }
+          } catch {}
+        }
+      }
+    }
+
+    cachedCacheInfo = null; // invalidate cache
+    return {
+      status: 'ok',
+      action: 'prune_stale',
+      freedBytes,
+      freedFormatted: formatBytes(freedBytes),
+      deletedCount,
+      keptCount: info.tasks.length - deletedCount,
+    };
+  }
+
+  if (action === 'delete_task') {
+    const taskId = params.taskId;
+    if (!taskId || !UUID_REGEX.test(taskId)) {
+      return { status: 'error', error: 'Invalid or missing task UUID format' };
+    }
+    if (taskId === activeId) {
+      return { status: 'error', error: 'Cannot delete currently active conversation' };
+    }
+
+    const taskDir = join(BRAIN_DIR, taskId);
+    let freedBytes = 0;
+
+    try {
+      if (existsSync(taskDir)) {
+        freedBytes += getDirectorySize(taskDir);
+        rmSync(taskDir, { recursive: true, force: true });
+      }
+    } catch (err) {
+      return { status: 'error', error: `Failed to delete task directory: ${err.message}` };
+    }
+
+    if (existsSync(CONVERSATIONS_DIR)) {
+      for (const ext of ['.pb', '.db', '.db-wal', '.db-shm']) {
+        const convFile = join(CONVERSATIONS_DIR, `${taskId}${ext}`);
+        try {
+          if (existsSync(convFile)) {
+            freedBytes += statSync(convFile).size;
+            rmSync(convFile, { force: true });
+          }
+        } catch {}
+      }
+    }
+
+    cachedCacheInfo = null; // invalidate cache
+    return {
+      status: 'ok',
+      action: 'delete_task',
+      taskId,
+      freedBytes,
+      freedFormatted: formatBytes(freedBytes),
+    };
+  }
+
+  if (action === 'clear_recordings') {
+    let freedBytes = 0;
+    if (existsSync(RECORDINGS_DIR)) {
+      try {
+        const entries = readdirSync(RECORDINGS_DIR, { withFileTypes: true });
+        for (const e of entries) {
+          const p = join(RECORDINGS_DIR, e.name);
+          try {
+            if (e.isDirectory()) {
+              freedBytes += getDirectorySize(p);
+              rmSync(p, { recursive: true, force: true });
+            } else if (e.isFile()) {
+              freedBytes += statSync(p).size;
+              rmSync(p, { force: true });
+            }
+          } catch {}
+        }
+      } catch (err) {
+        return { status: 'error', error: `Failed to clear recordings: ${err.message}` };
+      }
+    }
+
+    cachedCacheInfo = null;
+    return {
+      status: 'ok',
+      action: 'clear_recordings',
+      freedBytes,
+      freedFormatted: formatBytes(freedBytes),
+    };
+  }
+
+  return { status: 'error', error: `Unknown cache action: ${action}` };
+}
+
+/**
+ * Send Connect-RPC request to the Antigravity Language Server.
+ * @param {string} endpoint - LanguageServerService method identifier.
+ * @param {object} [payload={}] - Additional RPC payload fields.
+ * @returns {Promise<object>} Parsed JSON response.
+ */
+function fetchLanguageServerRpc(endpoint, payload = {}) {
+  return new Promise((resolve, reject) => {
+    const lsAddr = process.env.ANTIGRAVITY_LS_ADDRESS;
+    const csrfToken = process.env.ANTIGRAVITY_CSRF_TOKEN;
+
+    if (!lsAddr || !csrfToken) {
+      return reject(new Error('Language server address or CSRF token not configured'));
+    }
+
+    const [host, portStr] = lsAddr.split(':');
+    const port = parseInt(portStr || '64235', 10);
+    const body = JSON.stringify({
+      metadata: { ideName: 'antigravity', extensionName: 'antigravity', locale: 'en' },
+      ...payload,
+    });
+
+    const req = http.request({
+      hostname: host || '127.0.0.1',
+      port,
+      path: `/exa.language_server_pb.LanguageServerService/${endpoint}`,
+      method: 'POST',
+      timeout: 3500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'X-Codeium-Csrf-Token': csrfToken,
+        'Connect-Protocol-Version': '1',
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode && res.statusCode >= 400) {
+          return reject(new Error(`Language server responded with HTTP ${res.statusCode}`));
+        }
+        try {
+          resolve(JSON.parse(data));
+        } catch (err) {
+          reject(new Error(`Failed to parse language server response: ${err.message}`));
+        }
+      });
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Language server request timed out'));
+    });
+
+    req.on('error', (err) => {
+      reject(new Error(`Language server connection failed: ${err.message}`));
+    });
+
+    req.write(body);
+    req.end();
+  });
+}
+
+/**
+ * Retrieve model rate limit quotas and user credit metrics.
+ * @param {boolean} [force=false] - Whether to bypass in-memory quota cache.
+ * @returns {Promise<object>} Quota summary payload.
+ */
+async function fetchUserQuotaSummary(force = false) {
+  const now = Date.now();
+  if (!force && cachedQuota && now < quotaCacheExpiry) {
+    return cachedQuota;
+  }
+
+  try {
+    const [quotaRes, statusRes] = await Promise.allSettled([
+      fetchLanguageServerRpc('RetrieveUserQuotaSummary'),
+      fetchLanguageServerRpc('GetUserStatus'),
+    ]);
+
+    if (quotaRes.status !== 'fulfilled' && statusRes.status !== 'fulfilled') {
+      return {
+        status: 'unavailable',
+        message: 'Language Server is not reachable',
+        groups: [],
+        models: [],
+        user: null,
+      };
+    }
+
+    const rawQuota = quotaRes.status === 'fulfilled' ? quotaRes.value : null;
+    const rawStatus = statusRes.status === 'fulfilled' ? statusRes.value : null;
+
+    // Extract user profile and plan
+    const userStatus = rawStatus?.userStatus || {};
+    const planInfo = userStatus?.planStatus?.planInfo || {};
+    const user = {
+      name: userStatus.name || '',
+      email: userStatus.email || '',
+      plan: planInfo.planName || userStatus.userTier?.name || 'Pro',
+      availablePromptCredits: userStatus.planStatus?.availablePromptCredits ?? planInfo.monthlyPromptCredits ?? null,
+      monthlyPromptCredits: planInfo.monthlyPromptCredits ?? null,
+      availableFlowCredits: userStatus.planStatus?.availableFlowCredits ?? planInfo.monthlyFlowCredits ?? null,
+      monthlyFlowCredits: planInfo.monthlyFlowCredits ?? null,
+    };
+
+    // Extract rate limit quota groups
+    const rawGroups = rawQuota?.response?.groups || [];
+    const groups = rawGroups.map(g => ({
+      name: g.displayName || 'Model Group',
+      description: g.description || '',
+      buckets: (g.buckets || []).map(b => {
+        const remainingFraction = typeof b.remainingFraction === 'number'
+          ? Math.max(0, Math.min(1, b.remainingFraction))
+          : 0;
+        return {
+          id: b.bucketId || '',
+          name: b.displayName || b.bucketId || 'Limit',
+          description: b.description || '',
+          window: b.window || '',
+          remainingFraction,
+          remainingPercent: Math.round(remainingFraction * 100),
+          resetTime: b.resetTime || null,
+        };
+      }),
+    }));
+
+    // Extract configured models
+    const rawModels = userStatus.cascadeModelConfigData?.clientModelConfigs || [];
+    const models = rawModels
+      .filter(m => m.quotaInfo)
+      .map(m => {
+        const remainingFraction = typeof m.quotaInfo?.remainingFraction === 'number'
+          ? Math.max(0, Math.min(1, m.quotaInfo.remainingFraction))
+          : 0;
+        return {
+          label: m.label || 'Model',
+          modelId: m.modelId || m.modelOrAlias?.model || 'unknown',
+          remainingFraction,
+          remainingPercent: Math.round(remainingFraction * 100),
+          resetTime: m.quotaInfo?.resetTime || null,
+        };
+      });
+
+    const result = {
+      status: 'ok',
+      user,
+      groups,
+      models,
+      updatedAt: now,
+    };
+
+    cachedQuota = result;
+    quotaCacheExpiry = now + QUOTA_TTL_MS;
+    return result;
+  } catch (err) {
+    return {
+      status: 'unavailable',
+      message: err.message,
+      groups: [],
+      models: [],
+      user: null,
+    };
+  }
+}
+
+// Rate limit quota and credit metrics endpoint
+app.api('/api/quota', async (params) => {
+  const isForced = params?.force === 'true' || params?.force === true;
+  return await fetchUserQuotaSummary(isForced);
+}, 'GET');
+
+// Storage and cache inspection endpoint
+app.api('/api/cache', (params) => {
+  const isForced = params?.force === 'true' || params?.force === true;
+  return getBrainCacheInfo(isForced);
+}, 'GET');
+
+// Cache management action endpoint
+app.api('/api/cache', (data) => {
+  return handleCacheAction(data || {});
+}, 'POST');
 
 app.run();

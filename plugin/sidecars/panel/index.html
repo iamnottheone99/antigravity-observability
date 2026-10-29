@@ -79,6 +79,16 @@
         </svg>
         <span>Steer</span>
       </button>
+
+      <button id="nav-tab-system" class="nav-tab" data-tab="pane-system" role="tab" aria-selected="false" aria-controls="pane-system" tabindex="-1">
+        <svg class="icon" aria-hidden="true" viewBox="0 0 24 24">
+          <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+          <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+          <line x1="6" y1="6" x2="6.01" y2="6"/>
+          <line x1="6" y1="18" x2="6.01" y2="18"/>
+        </svg>
+        <span>Quota &amp; Cache</span>
+      </button>
     </nav>
 
     <!-- TAB 1: OVERVIEW -->
@@ -278,6 +288,35 @@
         <div id="error-taxonomy-bar" class="segmented-bar"></div>
         <div id="error-taxonomy-legend" class="error-taxonomy-legend"></div>
       </section>
+
+      <!-- Language Server Quota & Limits Snapshot -->
+      <section class="quota-snapshot-section" aria-label="Model Quota and Usage">
+        <div class="quota-snapshot-header">
+          <div class="quota-header-title">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span>Model Quotas &amp; Rate Limits</span>
+            <span id="quota-plan-pill" class="quota-pill">Pro</span>
+          </div>
+          <div class="quota-credits-group">
+            <span id="quota-prompt-credits" class="quota-credit-badge tabular mono" title="Monthly Prompt Credits">-- Credits</span>
+            <span id="quota-flow-credits" class="quota-credit-badge tabular mono" title="Monthly Flow Credits">-- Flow</span>
+            <button id="btn-refresh-quota" class="btn-refresh-subtle" type="button" title="Refresh model quotas" aria-label="Refresh model quotas">
+              <svg class="icon refresh-icon" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+                <path d="M21 3v5h-5"/>
+                <path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+                <path d="M3 21v-5h5"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div id="quota-bars-grid" class="quota-bars-grid">
+          <div class="quota-empty-state">Connecting to Language Server...</div>
+        </div>
+      </section>
     </main>
 
     <!-- TAB 2: TRACES -->
@@ -414,6 +453,83 @@
         </button>
       </div>
     </section>
+
+    <!-- TAB 5: QUOTA & CACHE STORAGE -->
+    <main id="pane-system" class="tab-pane" role="tabpanel" aria-labelledby="nav-tab-system" tabindex="0">
+      <!-- Section 1: Language Server Model Quotas -->
+      <section class="system-section" aria-label="Language Server Model Limits">
+        <div class="section-title-wrap">
+          <div class="section-title-left">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M12 2v20"/>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+            <h2 class="section-heading">Language Server Quota &amp; Rate Limits</h2>
+          </div>
+          <span id="ls-status-badge" class="badge-status-connected">Language Server Connected</span>
+        </div>
+        <div id="quota-details-container" class="quota-details-container">
+          <div class="quota-empty-state">Loading quota data...</div>
+        </div>
+      </section>
+
+      <!-- Section 2: Brain and Session Cache Management -->
+      <section class="system-section" aria-label="Cache Storage Management">
+        <div class="section-title-wrap">
+          <div class="section-title-left">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24">
+              <ellipse cx="12" cy="5" rx="9" ry="3"/>
+              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+            </svg>
+            <h2 class="section-heading">Brain &amp; Session Cache Storage</h2>
+          </div>
+          <div class="cache-actions">
+            <button id="btn-prune-stale" class="btn-action-primary" type="button" title="Prune sessions older than recent 10">
+              Prune Stale Sessions
+            </button>
+            <button id="btn-refresh-cache" class="btn-refresh-subtle" type="button" title="Refresh storage metrics">
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Storage Footprint Metric Tiles -->
+        <div class="storage-cards-grid">
+          <div class="storage-card">
+            <span class="storage-card-label">Total Cache Footprint</span>
+            <span id="val-storage-total" class="storage-card-val mono tabular">0 B</span>
+            <span class="storage-card-sub">Combined Antigravity storage</span>
+          </div>
+          <div class="storage-card">
+            <span class="storage-card-label">Brain Sessions</span>
+            <span id="val-storage-brain" class="storage-card-val mono tabular">0 B</span>
+            <span id="val-storage-brain-count" class="storage-card-sub tabular">0 sessions</span>
+          </div>
+          <div class="storage-card">
+            <span class="storage-card-label">Conversations Database</span>
+            <span id="val-storage-conversations" class="storage-card-val mono tabular">0 B</span>
+            <span class="storage-card-sub">Proto &amp; SQLite records</span>
+          </div>
+          <div class="storage-card">
+            <span class="storage-card-label">Browser Recordings</span>
+            <span id="val-storage-recordings" class="storage-card-val mono tabular">0 B</span>
+            <span class="storage-card-sub">Automated session recordings</span>
+          </div>
+        </div>
+
+        <!-- Brain Task Directory Items List -->
+        <div class="cache-task-list-wrap">
+          <div class="cache-list-header">
+            <span>Brain Sessions on Disk</span>
+            <span id="cache-tasks-count" class="tabular mono">0 sessions</span>
+          </div>
+          <div id="cache-tasks-feed" class="cache-tasks-feed">
+            <div class="cache-empty-state">Loading cache sessions...</div>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
 
   <!-- Toast Notification Bar -->

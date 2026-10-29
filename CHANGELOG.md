@@ -2,6 +2,24 @@
 
 All notable changes to the Antigravity Observability Companion will be documented in this file.
 
+## [1.5.0] - 2026-10-29
+
+### Added
+- **Language Server Model Quota & Credit Monitoring**: Integrated real-time tracking of Antigravity Language Server model rate limits and prompt/flow credit allocations via Connect-RPC:
+  - **Overview Quota Snapshot**: Displays live progress bars for Gemini Weekly, Gemini 5-Hour, and Claude/GPT limits with percentage meters and reset countdown timers right inside the Overview tab.
+  - **Account & Tier Telemetry**: Monitors user plan tier (e.g. Pro, Google AI Ultra), monthly prompt credits, available prompt credits, and flow credits.
+  - **Client Model Configuration Details**: Tabular view of all configured client models with quota percentages and reset timestamps.
+  - **Graceful Standalone Fallback**: Detects disconnected or standalone environments without erroring, presenting clean fallback indicators.
+- **Brain & Session Storage Cache Manager**: Built comprehensive storage inspection and cleanup tooling directly into the sidecar panel:
+  - **Storage Footprint Breakdown**: Real-time disk consumption metrics across Brain task directories, Conversations databases, Browser recordings, and temporary caches.
+  - **Interactive Session Inventory**: Scans and lists stored Brain sessions with user-friendly conversation titles, human-readable disk sizes, and modification timestamps.
+  - **Safe Pruning & Deletion Actions**: Automated pruning retaining recent sessions and individual task deletion with strict safeguards (UUID validation, path traversal defense, and active session protection).
+- **Quota & Cache Tab (`pane-system`)**: Added a 5th navigation tab housing detailed rate limits and storage management controls with manual refresh actions.
+- **Backend API Endpoints**:
+  - `GET /api/quota`: Returns model quota buckets, client model configs, and credit balances with a 15-second in-memory cache.
+  - `GET /api/cache`: Returns total storage footprints and enumerated Brain sessions with a 5-second in-memory cache.
+  - `POST /api/cache`: Handles safe cache pruning and individual task deletion.
+
 ## [1.4.0] - 2026-10-17
 
 ### Added

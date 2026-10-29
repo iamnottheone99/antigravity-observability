@@ -58,7 +58,7 @@ console.log('[Manifest & Structure Checks]');
 runTest('plugin.json is valid and contains expected metadata', () => {
   const data = JSON.parse(readFileSync(join(PLUGIN, 'plugin.json'), 'utf8'));
   assert.equal(data.name, 'agent-observability');
-  assert.equal(data.version, '1.4.0');
+  assert.equal(data.version, '1.5.0');
   assert.ok(data.description && data.description.length > 0);
   assert.equal(data.logo, 'assets/logo.svg');
 });
@@ -75,12 +75,12 @@ runTest('sidecar.json defines auxiliary pane entrypoint', () => {
 runTest('sidecars package.json defines ES module and matches version', () => {
   const data = JSON.parse(readFileSync(join(PLUGIN, 'sidecars/panel/package.json'), 'utf8'));
   assert.equal(data.type, 'module');
-  assert.equal(data.version, '1.4.0');
+  assert.equal(data.version, '1.5.0');
 });
 
-runTest('sidecar main.mjs status route matches version 1.4.0', () => {
+runTest('sidecar main.mjs status route matches version 1.5.0', () => {
   const code = readFileSync(join(PLUGIN, 'sidecars/panel/main.mjs'), 'utf8');
-  assert.ok(code.includes("version: '1.4.0'"), 'main.mjs status version is not 1.4.0');
+  assert.ok(code.includes("version: '1.5.0'"), 'main.mjs status version is not 1.5.0');
 });
 
 runTest('sidecar main.mjs defines transcript cache TTL and expiry pruning', () => {
@@ -105,9 +105,34 @@ runTest('sidecar main.mjs injects HTTP security headers and permits IDE iframe e
 runTest('root package.json is valid and declares engines', () => {
   const data = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   assert.equal(data.name, 'antigravity-observability');
-  assert.equal(data.version, '1.4.0');
+  assert.equal(data.version, '1.5.0');
   assert.equal(data.type, 'module');
   assert.ok(data.engines?.node, 'Missing engines.node definition');
+});
+
+runTest('sidecar main.mjs defines /api/quota and /api/cache endpoints', () => {
+  const code = readFileSync(join(PLUGIN, 'sidecars/panel/main.mjs'), 'utf8');
+  assert.ok(code.includes("app.api('/api/quota'"), 'Missing /api/quota route');
+  assert.ok(code.includes("app.api('/api/cache'"), 'Missing /api/cache route');
+  assert.ok(code.includes('UUID_REGEX'), 'Missing UUID validation regex');
+  assert.ok(code.includes('fetchLanguageServerRpc'), 'Missing fetchLanguageServerRpc helper');
+  assert.ok(code.includes('getBrainCacheInfo'), 'Missing getBrainCacheInfo helper');
+  assert.ok(code.includes('handleCacheAction'), 'Missing handleCacheAction helper');
+});
+
+runTest('HTML layout contains Quota & Cache tab, system pane, and quota snapshot components', () => {
+  const html = readFileSync(join(PLUGIN, 'sidecars/panel/index.html'), 'utf8');
+  assert.ok(html.includes('id="nav-tab-system"'), 'Missing nav-tab-system button');
+  assert.ok(html.includes('id="pane-system"'), 'Missing pane-system tab');
+  assert.ok(html.includes('class="quota-snapshot-section"'), 'Missing quota-snapshot-section');
+  assert.ok(html.includes('id="quota-bars-grid"'), 'Missing quota-bars-grid');
+  assert.ok(html.includes('id="quota-plan-pill"'), 'Missing quota-plan-pill');
+  assert.ok(html.includes('id="quota-prompt-credits"'), 'Missing quota-prompt-credits');
+  assert.ok(html.includes('id="quota-flow-credits"'), 'Missing quota-flow-credits');
+  assert.ok(html.includes('id="val-storage-total"'), 'Missing val-storage-total');
+  assert.ok(html.includes('id="val-storage-brain"'), 'Missing val-storage-brain');
+  assert.ok(html.includes('id="btn-prune-stale"'), 'Missing btn-prune-stale');
+  assert.ok(html.includes('id="cache-tasks-feed"'), 'Missing cache-tasks-feed');
 });
 
 runTest('HTML layout contains all 4 tabs, CSP, ARIA roles, and cognitive phase components', () => {
@@ -860,9 +885,35 @@ runTest('escapeHtml escapes dangerous HTML entities including single quotes', ()
   assert.equal(escapeHtml(undefined), '');
 });
 
-runTest('panel UI test suite executes all 22 component functions cleanly', () => {
+runTest('cache UUID validator rejects path traversal attempts and invalid formats', () => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  assert.equal(uuidRegex.test('11111111-2222-3333-4444-555555555555'), true);
+  assert.equal(uuidRegex.test('db66e817-f6a4-4e58-9db0-7e27d8c1bffe'), true);
+  assert.equal(uuidRegex.test('../../../etc/passwd'), false);
+  assert.equal(uuidRegex.test('..\\..\\windows\\system32'), false);
+  assert.equal(uuidRegex.test('invalid-id'), false);
+  assert.equal(uuidRegex.test(''), false);
+});
+
+runTest('formatBytes converts raw byte values into human-readable units', () => {
+  function formatBytes(bytes) {
+    if (!bytes || isNaN(bytes) || bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const val = bytes / Math.pow(1024, i);
+    return `${val.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+  }
+  assert.equal(formatBytes(0), '0 B');
+  assert.equal(formatBytes(null), '0 B');
+  assert.equal(formatBytes(500), '500 B');
+  assert.equal(formatBytes(1024), '1.0 KB');
+  assert.equal(formatBytes(1048576), '1.0 MB');
+  assert.equal(formatBytes(1073741824), '1.0 GB');
+});
+
+runTest('panel UI test suite executes all 32 component functions cleanly', () => {
   const out = execFileSync(process.execPath, [join(ROOT, 'tests/panel.test.js')], { encoding: 'utf8' });
-  assert.ok(out.includes('All 22 panel functions executed and verified successfully'), 'Panel tests failed');
+  assert.ok(out.includes('All 32 panel functions executed and verified successfully'), 'Panel tests failed');
 });
 
 // -----------------------------------------------------------------------------

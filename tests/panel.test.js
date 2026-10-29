@@ -86,16 +86,45 @@ globalThis.window = {
     agent: {
       sendMessage: async (text, convId) => ({ success: true }),
     },
-    fetch: async (path) => ({
-      ok: true,
-      json: async () => ({
-        conversationId: 'test-conv-001',
-        totalSteps: 5,
-        totalTokens: 1200,
-        recentSteps: [],
-        toolCounts: {},
-      }),
-    }),
+    fetch: async (path, options) => {
+      if (path.includes('/api/quota')) {
+        return {
+          ok: true,
+          json: async () => ({
+            status: 'ok',
+            user: { plan: 'Pro', availablePromptCredits: 500, availableFlowCredits: 100 },
+            groups: [{ name: 'Gemini Models', description: 'Gemini family', buckets: [{ id: 'gemini-weekly', name: 'Weekly Limit Remaining', remainingFraction: 0.85, resetTime: new Date(Date.now() + 86400000).toISOString() }] }],
+            models: [{ label: 'Gemini 2.5 Flash', modelId: 'gemini-2.5-flash', remainingFraction: 0.9, resetTime: null }]
+          }),
+        };
+      }
+      if (path.includes('/api/cache')) {
+        if (options?.method === 'POST') {
+          return {
+            ok: true,
+            json: async () => ({ status: 'ok', freedBytes: 1024, freedFormatted: '1.0 KB', deletedCount: 1 }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            status: 'ok',
+            summary: { totalFormatted: '400 MB', brainFormatted: '90 MB', brainTasksCount: 10, conversationsFormatted: '200 MB', recordingsFormatted: '110 MB' },
+            tasks: [{ id: '11111111-2222-3333-4444-555555555555', title: 'Test Task', sizeFormatted: '2 MB', mtime: Date.now() }],
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          conversationId: 'test-conv-001',
+          totalSteps: 5,
+          totalTokens: 1200,
+          recentSteps: [],
+          toolCounts: {},
+        }),
+      };
+    },
     conversationId: 'test-conv-001',
   },
   addEventListener: () => {},
@@ -277,5 +306,94 @@ assert.equal(getOrCreate('power-text').textContent, 'OFF');
 api.toggleMonitoring();
 assert.equal(getOrCreate('power-text').textContent, 'ON');
 
-console.log('\n[SUCCESS] All 22 panel functions executed and verified successfully!');
+// 23. formatRelativeTime
+console.log('  Testing formatRelativeTime...');
+assert.equal(api.formatRelativeTime(null), 'N/A');
+assert.equal(api.formatRelativeTime('invalid-date'), 'N/A');
+assert.equal(api.formatRelativeTime(new Date(Date.now() - 5000).toISOString()), 'Ready');
+assert.ok(api.formatRelativeTime(new Date(Date.now() + 3600000 * 25).toISOString()).includes('d'));
+assert.ok(api.formatRelativeTime(new Date(Date.now() + 3600000 * 2).toISOString()).includes('h'));
+
+// 24. renderQuotaSummary
+console.log('  Testing renderQuotaSummary...');
+api.renderQuotaSummary({ status: 'unavailable', message: 'Offline' });
+assert.equal(getOrCreate('ls-status-badge').textContent, 'Standalone Mode (Offline)');
+api.renderQuotaSummary({
+  status: 'ok',
+  user: { plan: 'Pro', availablePromptCredits: 500, availableFlowCredits: 100 },
+  groups: [{
+    name: 'Gemini Models',
+    description: 'Gemini models',
+    buckets: [{ id: 'gemini-weekly', name: 'Weekly Limit Remaining', remainingFraction: 0.85, resetTime: new Date(Date.now() + 86400000).toISOString() }],
+  }],
+  models: [{ label: 'Gemini 2.5 Flash', modelId: 'gemini-2.5-flash', remainingFraction: 0.9, resetTime: null }],
+});
+assert.equal(getOrCreate('quota-plan-pill').textContent, 'Pro');
+assert.equal(getOrCreate('quota-prompt-credits').textContent, '500 Credits');
+assert.equal(getOrCreate('quota-flow-credits').textContent, '100 Flow');
+assert.ok(getOrCreate('quota-bars-grid').innerHTML.includes('85%'));
+assert.ok(getOrCreate('quota-details-container').innerHTML.includes('Gemini 2.5 Flash'));
+
+// 25. renderCacheManager
+console.log('  Testing renderCacheManager...');
+api.renderCacheManager({
+  status: 'ok',
+  summary: {
+    totalFormatted: '400 MB',
+    brainFormatted: '90 MB',
+    brainTasksCount: 10,
+    conversationsFormatted: '200 MB',
+    recordingsFormatted: '110 MB',
+  },
+  tasks: [{
+    id: '11111111-2222-3333-4444-555555555555',
+    title: 'Test Session',
+    sizeFormatted: '2.5 MB',
+    mtime: Date.now(),
+  }],
+});
+assert.equal(getOrCreate('val-storage-total').textContent, '400 MB');
+assert.equal(getOrCreate('val-storage-brain').textContent, '90 MB');
+assert.ok(getOrCreate('cache-tasks-feed').innerHTML.includes('Test Session'));
+
+// 26. fetchEndpoint
+console.log('  Testing fetchEndpoint...');
+const endpointData = await api.fetchEndpoint('/api/quota');
+assert.equal(endpointData.status, 'ok');
+
+// 27. postCacheAction
+console.log('  Testing postCacheAction...');
+const actionRes = await api.postCacheAction({ action: 'prune_stale' });
+assert.equal(actionRes.status, 'ok');
+
+// 28. fetchResource
+console.log('  Testing fetchResource...');
+const quotaRes = await api.fetchResource('quota');
+assert.equal(quotaRes.status, 'ok');
+const cacheRes = await api.fetchResource('cache');
+assert.equal(cacheRes.status, 'ok');
+
+// 29. fetchQuotaData
+console.log('  Testing fetchQuotaData...');
+const qData = await api.fetchQuotaData(true);
+assert.equal(qData.status, 'ok');
+
+// 30. fetchCacheData
+console.log('  Testing fetchCacheData...');
+const cData = await api.fetchCacheData(true);
+assert.equal(cData.status, 'ok');
+
+// 31. pruneStaleSessions
+console.log('  Testing pruneStaleSessions...');
+const pruneRes = await api.pruneStaleSessions(5);
+assert.equal(pruneRes.status, 'ok');
+
+// 32. deleteCacheTask
+console.log('  Testing deleteCacheTask...');
+const delRes = await api.deleteCacheTask('11111111-2222-3333-4444-555555555555');
+assert.equal(delRes.status, 'ok');
+const activeDelRes = await api.deleteCacheTask('test-conv-001');
+assert.equal(activeDelRes.status, 'error');
+
+console.log('\n[SUCCESS] All 32 panel functions executed and verified successfully!');
 process.exit(0);
