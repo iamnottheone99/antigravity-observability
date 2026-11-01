@@ -17,6 +17,7 @@
   let lastTelemetryData = null;
   let toastTimer = null;
   let selectedConversationId = 'auto'; // 'auto' or explicit uuid
+  let hostWorkspaceFolder = '';
   let lastSessionsSignature = '';
   let lastTelemetrySignature = '';
   const expandedStepIndices = new Set();
@@ -63,6 +64,25 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  /**
+   * Extract human-readable project folder name from URI or path string.
+   * @param {string} uriOrStr - Workspace URI or directory path.
+   * @returns {string} Folder name or empty string.
+   */
+  function extractProjectFolder(uriOrStr) {
+    if (!uriOrStr || typeof uriOrStr !== 'string') return '';
+    if (uriOrStr === 'outside-of-project' || uriOrStr === 'global') return 'Global';
+    try {
+      const decoded = decodeURIComponent(uriOrStr);
+      const clean = decoded.replace(/^file:\/\/\/?/i, '').replace(/[\/\\]+$/, '');
+      const parts = clean.split(/[\/\\]/).filter(Boolean);
+      const last = parts.length > 0 ? parts[parts.length - 1] : '';
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(last) ? '' : last;
+    } catch {
+      return '';
+    }
   }
 
   /**
@@ -772,6 +792,7 @@
 
     const report = `# Antigravity Session Trace Report
 - **Session**: ${d.activeTitle || d.conversationId || 'N/A'}
+- **Project Folder**: ${d.activeProject || hostWorkspaceFolder || 'Global'}
 - **Conversation ID**: \`${d.conversationId || 'N/A'}\`
 - **Total Steps**: ${d.totalSteps || 0}
 - **Estimated Cost**: ${d.estimatedCost || '$0.0000'}
@@ -794,13 +815,14 @@ ${fileLines}
 
   /**
    * Update conversation session selector options when session list changes.
-   * @param {Array<{ id: string, title?: string, stepCount?: number }>} [sessions=[]] - Active sessions.
+   * @param {Array<{ id: string, title?: string, stepCount?: number, projectFolder?: string }>} [sessions=[]] - Active sessions.
    * @param {string} [activeTitle=''] - Title of active conversation.
+   * @param {string} [activeProject=''] - Project folder of active conversation.
    */
-  function updateSessionDropdown(sessions = [], activeTitle = '') {
+  function updateSessionDropdown(sessions = [], activeTitle = '', activeProject = '') {
     if (!Array.isArray(sessions) || sessions.length === 0) return;
 
-    const signature = sessions.map(s => `${s.id}:${s.stepCount}`).join(',') + `|${activeTitle}|${selectedConversationId}`;
+    const signature = sessions.map(s => `${s.id}:${s.stepCount}:${s.projectFolder || ''}`).join(',') + `|${activeTitle}|${activeProject}|${selectedConversationId}`;
     if (signature === lastSessionsSignature) {
       return; // Sessions unchanged, prevent dropdown DOM reset
     }
@@ -809,18 +831,33 @@ ${fileLines}
     const select = byId('session-select');
     const currentVal = selectedConversationId;
 
-    const autoLabel = activeTitle ? `Auto (${activeTitle.slice(0, 24)})` : 'Auto (Active Chat)';
+    const projectTag = activeProject ? `[${activeProject}] ` : '';
+    const autoLabel = activeTitle ? `Auto (${projectTag}${activeTitle.slice(0, 20)})` : (activeProject ? `Auto ([${activeProject}])` : 'Auto (Active Chat)');
     let optionsHtml = `<option value="auto" ${currentVal === 'auto' ? 'selected' : ''}>${escapeHtml(autoLabel)}</option>`;
 
     for (const s of sessions) {
       const isSelected = currentVal === s.id;
+      const folderTag = s.projectFolder ? `[${s.projectFolder}] ` : '';
       const titleText = s.title || `Chat ${s.id.slice(0, 8)}`;
       const stepTag = s.stepCount ? ` (${s.stepCount} steps)` : '';
-      optionsHtml += `<option value="${escapeHtml(s.id)}" ${isSelected ? 'selected' : ''}>${escapeHtml(titleText)}${stepTag}</option>`;
+      const fullLabel = `${folderTag}${titleText}${stepTag}`;
+      const optionTitle = s.projectFolder ? `Project: ${s.projectFolder}\nChat: ${s.title || s.id}` : (s.title || s.id);
+      optionsHtml += `<option value="${escapeHtml(s.id)}" title="${escapeHtml(optionTitle)}" ${isSelected ? 'selected' : ''}>${escapeHtml(fullLabel)}</option>`;
     }
 
     select.innerHTML = optionsHtml;
     select.value = currentVal;
+
+    if (currentVal === 'auto') {
+      select.title = activeProject ? `Active Chat: ${activeTitle || 'Chat'}\nProject: ${activeProject}` : (activeTitle || 'Active Chat');
+    } else {
+      const curSession = sessions.find(s => s.id === currentVal);
+      if (curSession) {
+        select.title = curSession.projectFolder ? `Chat: ${curSession.title || curSession.id}\nProject: ${curSession.projectFolder}` : (curSession.title || curSession.id);
+      } else {
+        select.title = '';
+      }
+    }
   }
 
   /**
@@ -855,7 +892,7 @@ ${fileLines}
       lastTelemetryData = data;
 
       if (data.sessions) {
-        updateSessionDropdown(data.sessions, data.activeTitle);
+        updateSessionDropdown(data.sessions, data.activeTitle, data.activeProject || hostWorkspaceFolder);
       }
 
       // Header Status & Pulse
@@ -1175,6 +1212,19 @@ ${fileLines}
     // Session selector dropdown
     byId('session-select').addEventListener('change', (e) => {
       selectedConversationId = e.target.value;
+      const curVal = selectedConversationId;
+      const sessions = lastTelemetryData?.sessions || [];
+      const select = byId('session-select');
+      if (curVal === 'auto') {
+        const activeProject = lastTelemetryData?.activeProject || hostWorkspaceFolder || '';
+        const activeTitle = lastTelemetryData?.activeTitle || '';
+        select.title = activeProject ? `Active Chat: ${activeTitle || 'Chat'}\nProject: ${activeProject}` : (activeTitle || 'Active Chat');
+      } else {
+        const curSession = sessions.find(s => s.id === curVal);
+        if (curSession) {
+          select.title = curSession.projectFolder ? `Chat: ${curSession.title || curSession.id}\nProject: ${curSession.projectFolder}` : (curSession.title || curSession.id);
+        }
+      }
       refreshTelemetry(true);
     });
 
@@ -1483,11 +1533,13 @@ ${fileLines}
       const dateStr = t.mtime ? new Date(t.mtime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
       const badgeCurrent = isCurrent ? '<span class="status-badge live" style="font-size: 8.5px; padding: 1px 4px;">ACTIVE</span>' : '';
 
+      const folderTag = t.projectFolder ? `<span class="project-tag mono">[${escapeHtml(t.projectFolder)}]</span> ` : '';
+
       feedHtml += `
         <div class="cache-task-item" data-task-id="${escapeHtml(t.id)}">
           <div class="cache-task-info">
             <div class="cache-task-title" title="${escapeHtml(t.title)}">
-              ${badgeCurrent} ${escapeHtml(t.title)}
+              ${badgeCurrent} ${folderTag}${escapeHtml(t.title)}
             </div>
             <div class="cache-task-meta tabular mono">
               <span>${escapeHtml(t.id.slice(0, 8))}...</span>
@@ -1671,6 +1723,25 @@ ${fileLines}
 
   // Auto-run when in real browser environment
   if (typeof window !== 'undefined' && typeof document !== 'undefined' && typeof window.addEventListener === 'function' && !globalThis.__IS_HEADLESS_TEST__) {
+    if (sidecar && typeof sidecar.getWorkspaceUris === 'function') {
+      sidecar.getWorkspaceUris().then(uris => {
+        if (Array.isArray(uris) && uris.length > 0) {
+          hostWorkspaceFolder = uris.map(extractProjectFolder).filter(Boolean).join(', ');
+        }
+      }).catch(() => {});
+    }
+    if (sidecar && typeof sidecar.onWorkspaceChange === 'function') {
+      sidecar.onWorkspaceChange(uris => {
+        if (Array.isArray(uris) && uris.length > 0) {
+          hostWorkspaceFolder = uris.map(extractProjectFolder).filter(Boolean).join(', ');
+        } else {
+          hostWorkspaceFolder = '';
+        }
+        if (lastTelemetryData && lastTelemetryData.sessions) {
+          updateSessionDropdown(lastTelemetryData.sessions, lastTelemetryData.activeTitle, lastTelemetryData.activeProject || hostWorkspaceFolder);
+        }
+      });
+    }
     setupTabsAndControls();
     refreshTelemetry(true);
     fetchQuotaData(false);
@@ -1684,6 +1755,7 @@ ${fileLines}
     showToast,
     formatTokens,
     escapeHtml,
+    extractProjectFolder,
     getToolCategory,
     sendSteerMessage,
     renderToolSpectrum,

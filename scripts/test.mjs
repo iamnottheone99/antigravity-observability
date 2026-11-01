@@ -22,6 +22,7 @@ import {
   ERROR_CATEGORIES,
   classifyError,
   calculateAgentHealth,
+  extractProjectFolder,
 } from '../plugin/sidecars/panel/telemetry.mjs';
 
 import {
@@ -911,9 +912,20 @@ runTest('formatBytes converts raw byte values into human-readable units', () => 
   assert.equal(formatBytes(1073741824), '1.0 GB');
 });
 
-runTest('panel UI test suite executes all 32 component functions cleanly', () => {
+runTest('extractProjectFolder parses file URIs, paths and edge cases', () => {
+  assert.equal(extractProjectFolder('file:///c%3A/Users/ashmi/Documents/Projects/antigravity-observability'), 'antigravity-observability');
+  assert.equal(extractProjectFolder('file:///c%3A%5CUsers%5Cashmi%5CDocuments%5CProjects%5Cgynaeconsult'), 'gynaeconsult');
+  assert.equal(extractProjectFolder('outside-of-project'), 'Global');
+  assert.equal(extractProjectFolder('global'), 'Global');
+  assert.equal(extractProjectFolder('c:/Users/someone/Projects/my-app/'), 'my-app');
+  assert.equal(extractProjectFolder('712a165b-ee9d-4c3e-8fa9-b829671d1e4c'), '');
+  assert.equal(extractProjectFolder(''), '');
+  assert.equal(extractProjectFolder(null), '');
+});
+
+runTest('panel UI test suite executes all 33 component functions cleanly', () => {
   const out = execFileSync(process.execPath, [join(ROOT, 'tests/panel.test.js')], { encoding: 'utf8' });
-  assert.ok(out.includes('All 32 panel functions executed and verified successfully'), 'Panel tests failed');
+  assert.ok(out.includes('All 33 panel functions executed and verified successfully'), 'Panel tests failed');
 });
 
 // -----------------------------------------------------------------------------

@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Response, SidecarApp } from 'sidecar_sdk';
 import { initNeuralEmbeddingEngine } from './classifier.mjs';
-import { parseTranscript } from './telemetry.mjs';
+import { extractProjectFolder, parseTranscript } from './telemetry.mjs';
 
 // Non-blocking background bootstrap of local neural embedding engine
 initNeuralEmbeddingEngine().catch(() => {});
@@ -87,7 +87,7 @@ function getRecentSessions(force = false) {
     try {
       db = new DatabaseSync(DB_PATH, { open: true, readOnly: true });
       const rows = db.prepare(`
-        SELECT conversation_id, title, preview, step_count, last_modified_time, parent_conversation_id
+        SELECT conversation_id, title, preview, step_count, last_modified_time, parent_conversation_id, workspace_uris, project_id
         FROM conversation_summaries
         WHERE parent_conversation_id = '' OR parent_conversation_id IS NULL
         ORDER BY last_modified_time DESC
@@ -104,9 +104,25 @@ function getRecentSessions(force = false) {
             cleanTitle = `Chat ${r.conversation_id.slice(0, 8)}`;
           }
 
+          let projectFolder = '';
+          if (r.workspace_uris) {
+            try {
+              const uris = JSON.parse(r.workspace_uris);
+              if (Array.isArray(uris) && uris.length > 0) {
+                projectFolder = uris.map(extractProjectFolder).filter(Boolean).join(', ');
+              }
+            } catch {
+              projectFolder = extractProjectFolder(r.workspace_uris);
+            }
+          }
+          if (!projectFolder && r.project_id === 'outside-of-project') {
+            projectFolder = 'Global';
+          }
+
           return {
             id: r.conversation_id,
             title: cleanTitle,
+            projectFolder,
             stepCount: r.step_count || 0,
             lastModified: r.last_modified_time || '',
           };
@@ -142,6 +158,7 @@ function getRecentSessions(force = false) {
           }
 
           let title = `Chat ${entry.name.slice(0, 8)}`;
+          let projectFolder = '';
           let fd = null;
           try {
             fd = openSync(transPath, 'r');
@@ -156,6 +173,13 @@ function getRecentSessions(force = false) {
                 const m = parsed.content.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
                 if (m) title = m[1].trim().split('\n')[0].slice(0, 32);
               }
+            }
+
+            const wsMatch = rawChunk.match(/Active Workspaces:\s*[\r\n]+-\s*([^\r\n]+)/i) ||
+                            rawChunk.match(/Projects\/([^\/\r\n]+)/) ||
+                            rawChunk.match(/Projects\\([^\/\r\n\\]+)/);
+            if (wsMatch && wsMatch[1]) {
+              projectFolder = extractProjectFolder(wsMatch[1].trim());
             }
           } catch {
             // ignore malformed initial chunk
@@ -172,6 +196,7 @@ function getRecentSessions(force = false) {
           sessions.push({
             id: entry.name,
             title,
+            projectFolder,
             lastModified: mtime,
           });
         }
@@ -216,9 +241,10 @@ app.api('/api/telemetry', (params) => {
     };
   }
 
-  // Find active chat title
+  // Find active chat title and project folder
   const activeSession = recentSessions.find(s => s.id === conversationId) || recentSessions[0];
   const activeTitle = activeSession ? activeSession.title : `Chat ${conversationId.slice(0, 8)}`;
+  const activeProject = activeSession ? (activeSession.projectFolder || '') : '';
 
   if (!/^[a-zA-Z0-9_-]+$/.test(conversationId)) {
     return { error: 'Invalid conversationId format', status: 'invalid_id' };
@@ -234,7 +260,7 @@ app.api('/api/telemetry', (params) => {
 
   if (!existsSync(transcriptPath)) {
     return {
-      ...parseTranscript('', { conversationId, activeTitle, isAuto, sessions: recentSessions }),
+      ...parseTranscript('', { conversationId, activeTitle, activeProject, isAuto, sessions: recentSessions }),
       status: 'waiting_for_transcript',
     };
   }
@@ -257,6 +283,7 @@ app.api('/api/telemetry', (params) => {
       return {
         ...cached.report,
         activeTitle,
+        activeProject,
         isAuto,
         sessions: recentSessions,
       };
@@ -273,6 +300,7 @@ app.api('/api/telemetry', (params) => {
   const parsed = parseTranscript(raw, {
     conversationId,
     activeTitle,
+    activeProject,
     isAuto,
     sessions: recentSessions,
   });
@@ -359,10 +387,24 @@ function getBrainCacheInfo(force = false) {
     let db = null;
     try {
       db = new DatabaseSync(DB_PATH, { open: true, readOnly: true });
-      const rows = db.prepare('SELECT conversation_id, title, preview FROM conversation_summaries').all();
+      const rows = db.prepare('SELECT conversation_id, title, preview, workspace_uris, project_id FROM conversation_summaries').all();
       for (const r of rows) {
         const t = (r.title || '').trim() || (r.preview || '').trim().slice(0, 48);
-        if (t) titleMap.set(r.conversation_id, t);
+        let projectFolder = '';
+        if (r.workspace_uris) {
+          try {
+            const uris = JSON.parse(r.workspace_uris);
+            if (Array.isArray(uris) && uris.length > 0) {
+              projectFolder = uris.map(extractProjectFolder).filter(Boolean).join(', ');
+            }
+          } catch {
+            projectFolder = extractProjectFolder(r.workspace_uris);
+          }
+        }
+        if (!projectFolder && r.project_id === 'outside-of-project') {
+          projectFolder = 'Global';
+        }
+        titleMap.set(r.conversation_id, { title: t, projectFolder });
       }
     } catch {
       // fallback if db locked or read fails
@@ -385,7 +427,9 @@ function getBrainCacheInfo(force = false) {
         const taskSize = getDirectorySize(taskPath);
         brainBytes += taskSize;
 
-        let title = titleMap.get(entry.name) || '';
+        const meta = titleMap.get(entry.name);
+        let title = meta?.title || '';
+        let projectFolder = meta?.projectFolder || '';
         if (!title) {
           const taskMd = join(taskPath, 'task.md');
           if (existsSync(taskMd)) {
@@ -411,6 +455,7 @@ function getBrainCacheInfo(force = false) {
         tasks.push({
           id: entry.name,
           title,
+          projectFolder,
           sizeBytes: taskSize,
           sizeFormatted: formatBytes(taskSize),
           mtime,

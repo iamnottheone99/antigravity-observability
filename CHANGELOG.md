@@ -2,9 +2,17 @@
 
 All notable changes to the Antigravity Observability Companion will be documented in this file.
 
-## [1.5.0] - 2026-10-29
+## [1.5.0] - 2026-11-01
 
 ### Added
+- **Project Folder Indicators in Session Dropdown & Storage Cache**:
+  - Prefixed conversation options with human-readable workspace project folders (`[project-folder] Chat Title (steps)`) or `[Global]` for outside-of-project sessions.
+  - Dynamically formatted the `Auto` option label to include project context: `Auto ([project-folder] Chat Title)` or `Auto ([project-folder])`.
+  - Added native multi-line HTML tooltips to `#session-select` displaying both full chat title and resolved project folder for truncated UI displays.
+  - Added `extractProjectFolder` helper with URI decoding, cross-platform path splitting, UUID exclusion, and fallback handling.
+  - Surfaced `[projectFolder]` metadata in the Brain storage cache manager session items list.
+  - Propagated project folder context to the exported Markdown session trace report.
+  - Subscribed to `sidecar.onWorkspaceChange` and `sidecar.getWorkspaceUris` to reactively reflect workspace project switching.
 - **Language Server Model Quota & Credit Monitoring**: Integrated real-time tracking of Antigravity Language Server model rate limits and prompt/flow credit allocations via Connect-RPC:
   - **Overview Quota Snapshot**: Displays live progress bars for Gemini Weekly, Gemini 5-Hour, and Claude/GPT limits with percentage meters and reset countdown timers right inside the Overview tab.
   - **Account & Tier Telemetry**: Monitors user plan tier (e.g. Pro, Google AI Ultra), monthly prompt credits, available prompt credits, and flow credits.

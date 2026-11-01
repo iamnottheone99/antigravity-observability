@@ -281,7 +281,8 @@ assert.ok(getOrCreate('toast-msg'));
 
 // 18. updateSessionDropdown
 console.log('  Testing updateSessionDropdown...');
-api.updateSessionDropdown([{ id: 'sess-001', title: 'Task Observability', stepCount: 12 }], 'Task Observability');
+api.updateSessionDropdown([{ id: 'sess-001', title: 'Task Observability', projectFolder: 'antigravity-observability', stepCount: 12 }], 'Task Observability', 'antigravity-observability');
+assert.ok(getOrCreate('session-select').innerHTML.includes('[antigravity-observability]'));
 assert.ok(getOrCreate('session-select').innerHTML.includes('Task Observability'));
 
 // 19. refreshTelemetry
@@ -395,5 +396,12 @@ assert.equal(delRes.status, 'ok');
 const activeDelRes = await api.deleteCacheTask('test-conv-001');
 assert.equal(activeDelRes.status, 'error');
 
-console.log('\n[SUCCESS] All 32 panel functions executed and verified successfully!');
+// 33. extractProjectFolder
+console.log('  Testing extractProjectFolder...');
+assert.equal(api.extractProjectFolder('file:///c%3A/Users/ashmi/Documents/Projects/antigravity-observability'), 'antigravity-observability');
+assert.equal(api.extractProjectFolder('outside-of-project'), 'Global');
+assert.equal(api.extractProjectFolder('global'), 'Global');
+assert.equal(api.extractProjectFolder(''), '');
+
+console.log('\n[SUCCESS] All 33 panel functions executed and verified successfully!');
 process.exit(0);

@@ -519,6 +519,7 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
   const {
     conversationId = '',
     activeTitle = '',
+    activeProject = '',
     isAuto = false,
     sessions = [],
   } = meta;
@@ -850,6 +851,7 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
     status: 'active',
     conversationId,
     activeTitle,
+    activeProject,
     isAuto,
     sessions,
     totalSteps: parsedSteps.length,
@@ -963,4 +965,25 @@ export function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+/**
+ * Extracts human-readable project folder name from a file URI or directory path.
+ *
+ * @param {string} uriOrStr File URI or path string.
+ * @returns {string} Folder name or empty string.
+ */
+export function extractProjectFolder(uriOrStr) {
+  if (!uriOrStr || typeof uriOrStr !== 'string') return '';
+  if (uriOrStr === 'outside-of-project' || uriOrStr === 'global') return 'Global';
+  try {
+    const decoded = decodeURIComponent(uriOrStr);
+    const clean = decoded.replace(/^file:\/\/\/?/i, '').replace(/[\/\\]+$/, '');
+    const parts = clean.split(/[\/\\]/).filter(Boolean);
+    const last = parts.length > 0 ? parts[parts.length - 1] : '';
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(last) ? '' : last;
+  } catch {
+    return '';
+  }
+}
+
 
