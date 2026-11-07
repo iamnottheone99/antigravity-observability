@@ -915,6 +915,9 @@ runTest('formatBytes converts raw byte values into human-readable units', () => 
 runTest('extractProjectFolder parses file URIs, paths and edge cases', () => {
   assert.equal(extractProjectFolder('file:///c%3A/Users/ashmi/Documents/Projects/antigravity-observability'), 'antigravity-observability');
   assert.equal(extractProjectFolder('file:///c%3A%5CUsers%5Cashmi%5CDocuments%5CProjects%5Cgynaeconsult'), 'gynaeconsult');
+  assert.equal(extractProjectFolder(['file:///c%3A/Users/ashmi/Projects/p1', 'file:///c%3A/Users/ashmi/Projects/p2']), 'p1, p2');
+  assert.equal(extractProjectFolder(['file:///c%3A/Users/ashmi/Projects/p1', 'file:///c%3A/Users/ashmi/Projects/p2', 'file:///c%3A/Users/ashmi/Projects/p3']), 'p1, p2 (+1 more)');
+  assert.equal(extractProjectFolder([]), '');
   assert.equal(extractProjectFolder('outside-of-project'), 'Global');
   assert.equal(extractProjectFolder('global'), 'Global');
   assert.equal(extractProjectFolder('c:/Users/someone/Projects/my-app/'), 'my-app');
@@ -923,9 +926,9 @@ runTest('extractProjectFolder parses file URIs, paths and edge cases', () => {
   assert.equal(extractProjectFolder(null), '');
 });
 
-runTest('panel UI test suite executes all 33 component functions cleanly', () => {
+runTest('panel UI test suite executes all 34 component functions cleanly', () => {
   const out = execFileSync(process.execPath, [join(ROOT, 'tests/panel.test.js')], { encoding: 'utf8' });
-  assert.ok(out.includes('All 33 panel functions executed and verified successfully'), 'Panel tests failed');
+  assert.ok(out.includes('All 34 panel functions executed and verified successfully'), 'Panel tests failed');
 });
 
 // -----------------------------------------------------------------------------

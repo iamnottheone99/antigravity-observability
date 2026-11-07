@@ -399,9 +399,16 @@ assert.equal(activeDelRes.status, 'error');
 // 33. extractProjectFolder
 console.log('  Testing extractProjectFolder...');
 assert.equal(api.extractProjectFolder('file:///c%3A/Users/ashmi/Documents/Projects/antigravity-observability'), 'antigravity-observability');
+assert.equal(api.extractProjectFolder(['file:///c%3A/Users/ashmi/Projects/p1', 'file:///c%3A/Users/ashmi/Projects/p2']), 'p1, p2');
+assert.equal(api.extractProjectFolder(['file:///c%3A/Users/ashmi/Projects/p1', 'file:///c%3A/Users/ashmi/Projects/p2', 'file:///c%3A/Users/ashmi/Projects/p3']), 'p1, p2 (+1 more)');
 assert.equal(api.extractProjectFolder('outside-of-project'), 'Global');
 assert.equal(api.extractProjectFolder('global'), 'Global');
 assert.equal(api.extractProjectFolder(''), '');
 
-console.log('\n[SUCCESS] All 33 panel functions executed and verified successfully!');
+// 34. syncDropdownTitle
+console.log('  Testing syncDropdownTitle...');
+api.syncDropdownTitle([{ id: 'sess-001', title: 'Task Observability', projectFolder: 'antigravity-observability' }], 'Task Observability', 'antigravity-observability');
+assert.ok(getOrCreate('session-select').title.includes('antigravity-observability'));
+
+console.log('\n[SUCCESS] All 34 panel functions executed and verified successfully!');
 process.exit(0);

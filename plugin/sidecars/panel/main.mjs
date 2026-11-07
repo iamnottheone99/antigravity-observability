@@ -107,10 +107,7 @@ function getRecentSessions(force = false) {
           let projectFolder = '';
           if (r.workspace_uris) {
             try {
-              const uris = JSON.parse(r.workspace_uris);
-              if (Array.isArray(uris) && uris.length > 0) {
-                projectFolder = uris.map(extractProjectFolder).filter(Boolean).join(', ');
-              }
+              projectFolder = extractProjectFolder(JSON.parse(r.workspace_uris));
             } catch {
               projectFolder = extractProjectFolder(r.workspace_uris);
             }
@@ -393,10 +390,7 @@ function getBrainCacheInfo(force = false) {
         let projectFolder = '';
         if (r.workspace_uris) {
           try {
-            const uris = JSON.parse(r.workspace_uris);
-            if (Array.isArray(uris) && uris.length > 0) {
-              projectFolder = uris.map(extractProjectFolder).filter(Boolean).join(', ');
-            }
+            projectFolder = extractProjectFolder(JSON.parse(r.workspace_uris));
           } catch {
             projectFolder = extractProjectFolder(r.workspace_uris);
           }

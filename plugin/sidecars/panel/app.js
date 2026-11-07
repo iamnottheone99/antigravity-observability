@@ -67,12 +67,19 @@
   }
 
   /**
-   * Extract human-readable project folder name from URI or path string.
-   * @param {string} uriOrStr - Workspace URI or directory path.
+   * Extract human-readable project folder name from URI, directory path, or URI list.
+   * @param {string|string[]} uriOrStr - Workspace URI, directory path, or URI list.
    * @returns {string} Folder name or empty string.
    */
   function extractProjectFolder(uriOrStr) {
-    if (!uriOrStr || typeof uriOrStr !== 'string') return '';
+    if (!uriOrStr) return '';
+    if (Array.isArray(uriOrStr)) {
+      const names = uriOrStr.map(extractProjectFolder).filter(Boolean);
+      if (names.length === 0) return '';
+      if (names.length <= 2) return names.join(', ');
+      return `${names.slice(0, 2).join(', ')} (+${names.length - 2} more)`;
+    }
+    if (typeof uriOrStr !== 'string') return '';
     if (uriOrStr === 'outside-of-project' || uriOrStr === 'global') return 'Global';
     try {
       const decoded = decodeURIComponent(uriOrStr);
@@ -814,6 +821,28 @@ ${fileLines}
   }
 
   /**
+   * Synchronize native title tooltip on the session selector element.
+   * @param {Array<{ id: string, title?: string, projectFolder?: string }>} [sessions=[]] - Active sessions.
+   * @param {string} [activeTitle=''] - Active conversation title.
+   * @param {string} [activeProject=''] - Active project folder.
+   */
+  function syncDropdownTitle(sessions = [], activeTitle = '', activeProject = '') {
+    const select = byId('session-select');
+    if (!select) return;
+    const currentVal = selectedConversationId;
+    if (currentVal === 'auto') {
+      select.title = activeProject ? `Active Chat: ${activeTitle || 'Chat'}\nProject: ${activeProject}` : (activeTitle || 'Active Chat');
+    } else {
+      const curSession = Array.isArray(sessions) ? sessions.find(s => s.id === currentVal) : null;
+      if (curSession) {
+        select.title = curSession.projectFolder ? `Chat: ${curSession.title || curSession.id}\nProject: ${curSession.projectFolder}` : (curSession.title || curSession.id);
+      } else {
+        select.title = '';
+      }
+    }
+  }
+
+  /**
    * Update conversation session selector options when session list changes.
    * @param {Array<{ id: string, title?: string, stepCount?: number, projectFolder?: string }>} [sessions=[]] - Active sessions.
    * @param {string} [activeTitle=''] - Title of active conversation.
@@ -821,6 +850,8 @@ ${fileLines}
    */
   function updateSessionDropdown(sessions = [], activeTitle = '', activeProject = '') {
     if (!Array.isArray(sessions) || sessions.length === 0) return;
+
+    syncDropdownTitle(sessions, activeTitle, activeProject);
 
     const signature = sessions.map(s => `${s.id}:${s.stepCount}:${s.projectFolder || ''}`).join(',') + `|${activeTitle}|${activeProject}|${selectedConversationId}`;
     if (signature === lastSessionsSignature) {
@@ -847,17 +878,7 @@ ${fileLines}
 
     select.innerHTML = optionsHtml;
     select.value = currentVal;
-
-    if (currentVal === 'auto') {
-      select.title = activeProject ? `Active Chat: ${activeTitle || 'Chat'}\nProject: ${activeProject}` : (activeTitle || 'Active Chat');
-    } else {
-      const curSession = sessions.find(s => s.id === currentVal);
-      if (curSession) {
-        select.title = curSession.projectFolder ? `Chat: ${curSession.title || curSession.id}\nProject: ${curSession.projectFolder}` : (curSession.title || curSession.id);
-      } else {
-        select.title = '';
-      }
-    }
+    syncDropdownTitle(sessions, activeTitle, activeProject);
   }
 
   /**
@@ -893,6 +914,8 @@ ${fileLines}
 
       if (data.sessions) {
         updateSessionDropdown(data.sessions, data.activeTitle, data.activeProject || hostWorkspaceFolder);
+      } else {
+        syncDropdownTitle([], data.activeTitle, data.activeProject || hostWorkspaceFolder);
       }
 
       // Header Status & Pulse
@@ -1212,19 +1235,11 @@ ${fileLines}
     // Session selector dropdown
     byId('session-select').addEventListener('change', (e) => {
       selectedConversationId = e.target.value;
-      const curVal = selectedConversationId;
-      const sessions = lastTelemetryData?.sessions || [];
-      const select = byId('session-select');
-      if (curVal === 'auto') {
-        const activeProject = lastTelemetryData?.activeProject || hostWorkspaceFolder || '';
-        const activeTitle = lastTelemetryData?.activeTitle || '';
-        select.title = activeProject ? `Active Chat: ${activeTitle || 'Chat'}\nProject: ${activeProject}` : (activeTitle || 'Active Chat');
-      } else {
-        const curSession = sessions.find(s => s.id === curVal);
-        if (curSession) {
-          select.title = curSession.projectFolder ? `Chat: ${curSession.title || curSession.id}\nProject: ${curSession.projectFolder}` : (curSession.title || curSession.id);
-        }
-      }
+      syncDropdownTitle(
+        lastTelemetryData?.sessions || [],
+        lastTelemetryData?.activeTitle || '',
+        lastTelemetryData?.activeProject || hostWorkspaceFolder || ''
+      );
       refreshTelemetry(true);
     });
 
@@ -1725,18 +1740,12 @@ ${fileLines}
   if (typeof window !== 'undefined' && typeof document !== 'undefined' && typeof window.addEventListener === 'function' && !globalThis.__IS_HEADLESS_TEST__) {
     if (sidecar && typeof sidecar.getWorkspaceUris === 'function') {
       sidecar.getWorkspaceUris().then(uris => {
-        if (Array.isArray(uris) && uris.length > 0) {
-          hostWorkspaceFolder = uris.map(extractProjectFolder).filter(Boolean).join(', ');
-        }
+        hostWorkspaceFolder = extractProjectFolder(uris);
       }).catch(() => {});
     }
     if (sidecar && typeof sidecar.onWorkspaceChange === 'function') {
       sidecar.onWorkspaceChange(uris => {
-        if (Array.isArray(uris) && uris.length > 0) {
-          hostWorkspaceFolder = uris.map(extractProjectFolder).filter(Boolean).join(', ');
-        } else {
-          hostWorkspaceFolder = '';
-        }
+        hostWorkspaceFolder = extractProjectFolder(uris);
         if (lastTelemetryData && lastTelemetryData.sessions) {
           updateSessionDropdown(lastTelemetryData.sessions, lastTelemetryData.activeTitle, lastTelemetryData.activeProject || hostWorkspaceFolder);
         }
@@ -1756,6 +1765,7 @@ ${fileLines}
     formatTokens,
     escapeHtml,
     extractProjectFolder,
+    syncDropdownTitle,
     getToolCategory,
     sendSteerMessage,
     renderToolSpectrum,

@@ -967,13 +967,20 @@ export function escapeHtml(str) {
 }
 
 /**
- * Extracts human-readable project folder name from a file URI or directory path.
+ * Extracts human-readable project folder name from URI, directory path, or URI list.
  *
- * @param {string} uriOrStr File URI or path string.
+ * @param {string|string[]} uriOrStr File URI, directory path, or URI list.
  * @returns {string} Folder name or empty string.
  */
 export function extractProjectFolder(uriOrStr) {
-  if (!uriOrStr || typeof uriOrStr !== 'string') return '';
+  if (!uriOrStr) return '';
+  if (Array.isArray(uriOrStr)) {
+    const names = uriOrStr.map(extractProjectFolder).filter(Boolean);
+    if (names.length === 0) return '';
+    if (names.length <= 2) return names.join(', ');
+    return `${names.slice(0, 2).join(', ')} (+${names.length - 2} more)`;
+  }
+  if (typeof uriOrStr !== 'string') return '';
   if (uriOrStr === 'outside-of-project' || uriOrStr === 'global') return 'Global';
   try {
     const decoded = decodeURIComponent(uriOrStr);
