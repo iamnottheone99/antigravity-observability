@@ -333,6 +333,8 @@ assert.equal(getOrCreate('quota-plan-pill').textContent, 'Pro');
 assert.equal(getOrCreate('quota-prompt-credits').textContent, '500 Credits');
 assert.equal(getOrCreate('quota-flow-credits').textContent, '100 Flow');
 assert.ok(getOrCreate('quota-bars-grid').innerHTML.includes('85%'));
+assert.ok(getOrCreate('quota-bars-grid').innerHTML.includes('Gemini Models'));
+assert.ok(getOrCreate('quota-bars-grid').innerHTML.includes('quota-bucket-model-badge'));
 assert.ok(getOrCreate('quota-details-container').innerHTML.includes('Gemini 2.5 Flash'));
 
 // 25. renderCacheManager

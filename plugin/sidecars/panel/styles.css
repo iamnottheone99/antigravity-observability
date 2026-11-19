@@ -1680,6 +1680,58 @@ body {
   gap: 8px;
 }
 
+#quota-bars-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.quota-group-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.quota-group-header-compact {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 2px;
+}
+
+.quota-group-title-compact {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--foreground);
+  letter-spacing: 0.2px;
+}
+
+.quota-group-desc-compact {
+  font-size: 9.5px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.quota-cards-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.quota-bucket-model-badge {
+  font-size: 9px;
+  font-weight: 600;
+  color: #38bdf8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
 .quota-bucket-card {
   background: var(--secondary);
   border: 1px solid rgba(255, 255, 255, 0.05);

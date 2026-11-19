@@ -1381,37 +1381,53 @@ ${fileLines}
     // Overview snapshot bars
     if (barsGrid) {
       const groups = quotaData.groups || [];
-      const buckets = [];
-      for (const g of groups) {
-        if (Array.isArray(g.buckets)) {
-          buckets.push(...g.buckets);
-        }
-      }
+      const hasAnyBuckets = groups.some(g => Array.isArray(g.buckets) && g.buckets.length > 0);
 
-      if (buckets.length === 0) {
+      if (!hasAnyBuckets) {
         barsGrid.innerHTML = '<div class="quota-empty-state">No active quota buckets reported.</div>';
       } else {
-        let cardsHtml = '';
-        for (const b of buckets) {
-          const pct = b.remainingPercent ?? Math.round((b.remainingFraction || 0) * 100);
-          const fillCls = pct > 50 ? 'high' : (pct > 20 ? 'medium' : 'low');
-          const resetLabel = formatRelativeTime(b.resetTime);
-          const nameClean = b.name.replace(/ Limit Remaining/i, '').replace(/ Remaining/i, '');
+        let groupsHtml = '';
+        for (const g of groups) {
+          const buckets = g.buckets || [];
+          if (buckets.length === 0) continue;
 
-          cardsHtml += `
-            <div class="quota-bucket-card" title="${escapeHtml(b.description || b.name)}">
-              <div class="quota-bucket-top">
-                <span class="quota-bucket-name">${escapeHtml(nameClean)}</span>
-                <span class="quota-bucket-val tabular mono">${pct}%</span>
+          let cardsHtml = '';
+          for (const b of buckets) {
+            const pct = b.remainingPercent ?? Math.round((b.remainingFraction || 0) * 100);
+            const fillCls = pct > 50 ? 'high' : (pct > 20 ? 'medium' : 'low');
+            const resetLabel = formatRelativeTime(b.resetTime);
+            const nameClean = b.name.replace(/ Limit Remaining/i, '').replace(/ Remaining/i, '');
+            const modelLabel = b.groupName || g.name || 'Model';
+            const fullTitle = `${modelLabel} · ${nameClean}: ${pct}% remaining (Reset: ${resetLabel})`;
+
+            cardsHtml += `
+              <div class="quota-bucket-card" title="${escapeHtml(fullTitle)}">
+                <div class="quota-bucket-model-badge" title="${escapeHtml(modelLabel)}">${escapeHtml(modelLabel)}</div>
+                <div class="quota-bucket-top">
+                  <span class="quota-bucket-name">${escapeHtml(nameClean)}</span>
+                  <span class="quota-bucket-val tabular mono">${pct}%</span>
+                </div>
+                <div class="quota-bucket-bar">
+                  <div class="quota-bucket-fill ${fillCls}" style="width: ${pct}%;"></div>
+                </div>
+                <div class="quota-bucket-reset tabular mono">Reset: ${escapeHtml(resetLabel)}</div>
               </div>
-              <div class="quota-bucket-bar">
-                <div class="quota-bucket-fill ${fillCls}" style="width: ${pct}%;"></div>
+            `;
+          }
+
+          groupsHtml += `
+            <div class="quota-group-section">
+              <div class="quota-group-header-compact">
+                <span class="quota-group-title-compact">${escapeHtml(g.name)}</span>
+                ${g.description ? `<span class="quota-group-desc-compact" title="${escapeHtml(g.description)}">${escapeHtml(g.description)}</span>` : ''}
               </div>
-              <div class="quota-bucket-reset tabular mono">Reset: ${escapeHtml(resetLabel)}</div>
+              <div class="quota-cards-row">
+                ${cardsHtml}
+              </div>
             </div>
           `;
         }
-        barsGrid.innerHTML = cardsHtml;
+        barsGrid.innerHTML = groupsHtml;
       }
     }
 
@@ -1426,7 +1442,7 @@ ${fileLines}
           <div class="quota-group-card">
             <div class="quota-group-header">
               <span class="quota-group-title">${escapeHtml(g.name)}</span>
-              <span class="quota-group-desc">${escapeHtml(g.description)}</span>
+              ${g.description ? `<span class="quota-group-desc">${escapeHtml(g.description)}</span>` : ''}
             </div>
             <div class="quota-bars-grid">
         `;
@@ -1435,10 +1451,15 @@ ${fileLines}
           const pct = b.remainingPercent ?? Math.round((b.remainingFraction || 0) * 100);
           const fillCls = pct > 50 ? 'high' : (pct > 20 ? 'medium' : 'low');
           const resetLabel = formatRelativeTime(b.resetTime);
+          const nameClean = b.name.replace(/ Limit Remaining/i, '').replace(/ Remaining/i, '');
+          const modelLabel = b.groupName || g.name || 'Model';
+          const fullTitle = `${modelLabel} · ${nameClean}: ${pct}% remaining (Reset: ${resetLabel})`;
+
           detailsHtml += `
-            <div class="quota-bucket-card" title="${escapeHtml(b.description)}">
+            <div class="quota-bucket-card" title="${escapeHtml(fullTitle)}">
+              <div class="quota-bucket-model-badge" title="${escapeHtml(modelLabel)}">${escapeHtml(modelLabel)}</div>
               <div class="quota-bucket-top">
-                <span class="quota-bucket-name">${escapeHtml(b.name)}</span>
+                <span class="quota-bucket-name">${escapeHtml(nameClean)}</span>
                 <span class="quota-bucket-val tabular mono">${pct}%</span>
               </div>
               <div class="quota-bucket-bar">

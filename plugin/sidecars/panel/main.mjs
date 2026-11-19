@@ -894,25 +894,43 @@ async function fetchUserQuotaSummary(force = false) {
     };
 
     // Extract rate limit quota groups
-    const rawGroups = rawQuota?.response?.groups || [];
-    const groups = rawGroups.map(g => ({
-      name: g.displayName || 'Model Group',
-      description: g.description || '',
-      buckets: (g.buckets || []).map(b => {
-        const remainingFraction = typeof b.remainingFraction === 'number'
-          ? Math.max(0, Math.min(1, b.remainingFraction))
-          : 0;
-        return {
-          id: b.bucketId || '',
-          name: b.displayName || b.bucketId || 'Limit',
-          description: b.description || '',
-          window: b.window || '',
-          remainingFraction,
-          remainingPercent: Math.round(remainingFraction * 100),
-          resetTime: b.resetTime || null,
-        };
-      }),
-    }));
+    const rawGroups = rawQuota?.response?.groups || rawQuota?.groups || [];
+    const groups = rawGroups.map(g => {
+      let groupName = g.displayName || g.name || g.label || g.title || '';
+      if (!groupName) {
+        const firstBucketId = g.buckets?.[0]?.bucketId || g.buckets?.[0]?.id || '';
+        if (firstBucketId) {
+          groupName = firstBucketId
+            .replace(/-weekly|-five-hour|-limit|-remaining/gi, '')
+            .replace(/[-_]/g, ' ')
+            .trim();
+        }
+      }
+      if (!groupName) groupName = 'Model Group';
+
+      const groupDesc = g.description || (Array.isArray(g.models) ? g.models.map(m => m.label || m.modelId || m).join(', ') : '');
+
+      return {
+        name: groupName,
+        description: groupDesc,
+        buckets: (g.buckets || []).map(b => {
+          const remainingFraction = typeof b.remainingFraction === 'number'
+            ? Math.max(0, Math.min(1, b.remainingFraction))
+            : 0;
+          return {
+            id: b.bucketId || b.id || '',
+            name: b.displayName || b.name || b.bucketId || 'Limit',
+            groupName,
+            groupDescription: groupDesc,
+            description: b.description || '',
+            window: b.window || '',
+            remainingFraction,
+            remainingPercent: Math.round(remainingFraction * 100),
+            resetTime: b.resetTime || null,
+          };
+        }),
+      };
+    });
 
     // Extract configured models
     const rawModels = userStatus.cascadeModelConfigData?.clientModelConfigs || [];
