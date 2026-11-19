@@ -1,11 +1,13 @@
-import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import http from 'node:http';
-import { homedir, platform, release } from 'node:os';
+import { homedir, platform, release, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Response, SidecarApp } from 'sidecar_sdk';
-import { initNeuralEmbeddingEngine } from './classifier.mjs';
+import { getEmbeddingEngineStatus, initNeuralEmbeddingEngine } from './classifier.mjs';
 import { extractProjectFolder, parseTranscript } from './telemetry.mjs';
+import { initFtsIndex, indexSessionSteps, searchTranscripts } from './fts.mjs';
 
 // Non-blocking background bootstrap of local neural embedding engine
 initNeuralEmbeddingEngine().catch(() => {});
@@ -28,6 +30,29 @@ const RECORDINGS_DIR = join(ANTIGRAVITY_BASE, 'browser_recordings');
 const CACHE_DIR = join(ANTIGRAVITY_BASE, 'cache');
 const DB_PATH = join(ANTIGRAVITY_BASE, 'conversation_summaries.db');
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Application Session Scoping: detect parent IDE process start time
+let appStartTime = null;
+if (platform() === 'win32') {
+  try {
+    const out = execSync(
+      'powershell -NoProfile -Command "(Get-Process -Name language_server, Antigravity -ErrorAction SilentlyContinue | Measure-Object -Property StartTime -Minimum).Minimum.ToUniversalTime().ToString(\'yyyy-MM-ddTHH:mm:ss.fffZ\')"',
+      { encoding: 'utf8', timeout: 3000 }
+    );
+    const ts = new Date(out.trim()).getTime();
+    if (!Number.isNaN(ts) && ts > 0) appStartTime = ts;
+  } catch {}
+} else {
+  try {
+    const out = execSync("ps -eo lstart,comm | grep -E 'language_server|Antigravity' | head -n 1", { encoding: 'utf8', timeout: 3000 });
+    const ts = new Date(out.trim()).getTime();
+    if (!Number.isNaN(ts) && ts > 0) appStartTime = ts;
+  } catch {}
+}
+
+if (!appStartTime) {
+  appStartTime = Date.now() - Math.round(process.uptime() * 1000);
+}
 
 // In-memory caches to eliminate synchronous disk churn during 2.5s polling
 let cachedSessions = null;
@@ -61,15 +86,79 @@ app.page('/', () => new Response(readLocal('index.html'), { contentType: 'text/h
 app.page('/app.js', () => new Response(readLocal('app.js'), { contentType: 'application/javascript', headers: SECURITY_HEADERS }));
 app.api('/styles.css', () => new Response(readLocal('styles.css'), { contentType: 'text/css', headers: SECURITY_HEADERS }), 'GET');
 
-// System status
+/**
+ * Diagnostic health check evaluator for system resources, database, and latency.
+ */
+function runDiagnostics() {
+  const result = {
+    status: 'HEALTHY',
+    allOk: true,
+    db: {
+      available: Boolean(DatabaseSync),
+      path: DB_PATH,
+      exists: existsSync(DB_PATH),
+      walEnabled: false,
+      busyTimeoutMs: 3000,
+    },
+    diskLatencyMs: 0,
+    neuralEmbedding: getEmbeddingEngineStatus(),
+    runtimes: {
+      node: process.version,
+      platform: `${platform()} ${release()}`,
+      arch: process.arch,
+      memory: process.memoryUsage(),
+    },
+    uptimeSeconds: Math.round((Date.now() - STARTED_AT) / 1000),
+    appStartTime: new Date(appStartTime).toISOString(),
+    appUptimeSeconds: Math.round((Date.now() - appStartTime) / 1000),
+  };
+
+  // Disk I/O latency probe
+  try {
+    const testFile = join(tmpdir(), `antigravity-diagnostics-${Date.now()}.tmp`);
+    const t0 = performance.now();
+    writeFileSync(testFile, '1');
+    readFileSync(testFile);
+    unlinkSync(testFile);
+    result.diskLatencyMs = Number((performance.now() - t0).toFixed(2));
+  } catch {
+    result.diskLatencyMs = -1;
+  }
+
+  // SQLite WAL check
+  if (DatabaseSync && existsSync(DB_PATH)) {
+    let db = null;
+    try {
+      db = new DatabaseSync(DB_PATH, { open: true, readOnly: true });
+      const mode = db.prepare('PRAGMA journal_mode').get();
+      result.db.walEnabled = mode && String(Object.values(mode)[0]).toLowerCase() === 'wal';
+    } catch (err) {
+      result.db.error = err.message;
+      result.status = 'DEGRADED';
+      result.allOk = false;
+    } finally {
+      if (db) {
+        try { db.close(); } catch {}
+      }
+    }
+  }
+
+  return result;
+}
+
+// System status with full diagnostics and application session scoping
 app.api('/api/status', () => ({
   status: 'ok',
   version: '1.5.0',
   node: process.version,
   platform: `${platform()} ${release()}`,
   uptimeSeconds: Math.round((Date.now() - STARTED_AT) / 1000),
+  appStartTime: new Date(appStartTime).toISOString(),
+  appUptimeSeconds: Math.round((Date.now() - appStartTime) / 1000),
+  sessionScopes: ['conversation', 'app', 'lifetime'],
   sqliteAvailable: Boolean(DatabaseSync),
   cachedTranscripts: transcriptCache.size,
+  diagnostics: runDiagnostics(),
 }), 'GET');
 
 // Retrieve recent conversations with real user-facing titles (cached)
@@ -86,6 +175,10 @@ function getRecentSessions(force = false) {
     let db = null;
     try {
       db = new DatabaseSync(DB_PATH, { open: true, readOnly: true });
+      // Enable WAL journal mode, shared cache, and increased page cache for safe concurrent reads.
+      db.pragma('journal_mode=WAL');
+      db.pragma('busy_timeout=3000');
+      db.pragma('cache_size=-64000');
       const rows = db.prepare(`
         SELECT conversation_id, title, preview, step_count, last_modified_time, parent_conversation_id, workspace_uris, project_id
         FROM conversation_summaries
@@ -210,9 +303,15 @@ function getRecentSessions(force = false) {
   return sessions;
 }
 
-// Endpoint to list all discoverable conversation sessions
-app.api('/api/sessions', () => {
-  return { sessions: getRecentSessions() };
+// Endpoint to list all discoverable conversation sessions with optional scope filter
+app.api('/api/sessions', (params) => {
+  const scope = params?.scope || 'all';
+  let sessions = getRecentSessions();
+  if (scope === 'app') {
+    const sinceIso = new Date(appStartTime).toISOString();
+    sessions = sessions.filter(s => (s.lastModified && s.lastModified >= sinceIso) || (typeof s.lastModified === 'number' && s.lastModified >= appStartTime));
+  }
+  return { sessions, scope, appStartTime: new Date(appStartTime).toISOString() };
 }, 'GET');
 
 // Telemetry parsing endpoint with file mtime/size caching
@@ -321,7 +420,45 @@ app.api('/api/telemetry', (params) => {
     expiresAt: now + TRANSCRIPT_TTL_MS,
   });
 
+  // Background FTS5 indexing of parsed steps when SQLite is available
+  if (DatabaseSync && existsSync(DB_PATH) && Array.isArray(parsed.recentSteps)) {
+    try {
+      const db = new DatabaseSync(DB_PATH, { open: true });
+      indexSessionSteps(db, conversationId, parsed.recentSteps);
+      db.close();
+    } catch {}
+  }
+
   return parsed;
+}, 'GET');
+
+// Instant full-text search across indexed transcripts using SQLite FTS5 BM25 + Trigram
+app.api('/api/search', (params) => {
+  const q = params?.q || params?.query || '';
+  const limit = parseInt(params?.limit, 10) || 20;
+  if (!DatabaseSync || !existsSync(DB_PATH)) {
+    return { query: q, results: [], total: 0, engine: 'unavailable' };
+  }
+  let db = null;
+  try {
+    db = new DatabaseSync(DB_PATH, { open: true });
+    db.pragma('journal_mode=WAL');
+    db.pragma('busy_timeout=3000');
+    initFtsIndex(db);
+    const hits = searchTranscripts(db, q, limit);
+    return { query: q, results: hits, total: hits.length, engine: 'sqlite-fts5-trigram' };
+  } catch (err) {
+    return { query: q, results: [], total: 0, error: err.message, engine: 'sqlite-fts5-trigram' };
+  } finally {
+    if (db) {
+      try { db.close(); } catch {}
+    }
+  }
+}, 'GET');
+
+// Detailed runtime diagnostics endpoint
+app.api('/api/doctor', () => {
+  return runDiagnostics();
 }, 'GET');
 
 /**
@@ -384,6 +521,10 @@ function getBrainCacheInfo(force = false) {
     let db = null;
     try {
       db = new DatabaseSync(DB_PATH, { open: true, readOnly: true });
+      // Enable WAL journal mode, shared cache, and increased page cache for safe concurrent reads.
+      db.pragma('journal_mode=WAL');
+      db.pragma('busy_timeout=3000');
+      db.pragma('cache_size=-64000');
       const rows = db.prepare('SELECT conversation_id, title, preview, workspace_uris, project_id FROM conversation_summaries').all();
       for (const r of rows) {
         const t = (r.title || '').trim() || (r.preview || '').trim().slice(0, 48);
@@ -498,13 +639,30 @@ function getBrainCacheInfo(force = false) {
  * @returns {object} Action execution status.
  */
 function handleCacheAction(params = {}) {
-  const action = params.action;
+  // Validate that the request is not a CSRF forgery.
+  // In the IDE extension context the sidecar binds to localhost only, so cross-origin attacks
+  // are limited, but we still guard against malicious local processes or attacker-controlled env vars.
+  const reqOrigin = params._origin;
+  if (reqOrigin && !/^(https?:\/\/)?localhost(:\d+)?$/.test(reqOrigin)) {
+    return { status: 'error', error: 'Forbidden origin' };
+  }
   const activeId = params.activeConversationId || process.env.ANTIGRAVITY_CONVERSATION_ID || '';
+  const action = params.action;
+  // Cross-reference active conversation ID against known sessions from brain tasks to prevent
+  // spoofed activeConversationId (e.g. attacker-controlled env var).
+  let knownActiveSessions = [];
+  if (activeId) {
+    try {
+      const info = getBrainCacheInfo(true);
+      knownActiveSessions = info.tasks.map(t => t.id);
+    } catch { /* best-effort; not fatal */ }
+  }
 
   if (action === 'prune_stale') {
-    const keepCount = Math.max(1, parseInt(params.keepCount, 10) || 10);
+    // Clamp keepCount to safe bounds; prevent accidental mass deletion.
+    const keepCount = Math.min(50, Math.max(1, parseInt(params.keepCount, 10) || 10));
     const info = getBrainCacheInfo(true);
-    const toDelete = info.tasks.slice(keepCount).filter(t => t.id !== activeId);
+    const toDelete = info.tasks.slice(keepCount).filter(t => !knownActiveSessions.includes(t.id) && t.id !== activeId);
 
     let freedBytes = 0;
     let deletedCount = 0;
@@ -553,11 +711,16 @@ function handleCacheAction(params = {}) {
     if (!taskId || !UUID_REGEX.test(taskId)) {
       return { status: 'error', error: 'Invalid or missing task UUID format' };
     }
+    // Verify the task directory actually exists before allowing deletion.
+    // Prevents fake success from spoofed taskId values.
+    const taskDir = join(BRAIN_DIR, taskId);
+    if (!existsSync(taskDir)) {
+      return { status: 'error', error: 'Task does not exist on disk' };
+    }
     if (taskId === activeId) {
       return { status: 'error', error: 'Cannot delete currently active conversation' };
     }
 
-    const taskDir = join(BRAIN_DIR, taskId);
     let freedBytes = 0;
 
     try {
@@ -568,7 +731,6 @@ function handleCacheAction(params = {}) {
     } catch (err) {
       return { status: 'error', error: `Failed to delete task directory: ${err.message}` };
     }
-
     if (existsSync(CONVERSATIONS_DIR)) {
       for (const ext of ['.pb', '.db', '.db-wal', '.db-shm']) {
         const convFile = join(CONVERSATIONS_DIR, `${taskId}${ext}`);

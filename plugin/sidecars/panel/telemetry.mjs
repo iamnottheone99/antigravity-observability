@@ -3,6 +3,9 @@
  * Free of external framework dependencies so it can be tested and reused across runtimes.
  */
 
+import { existsSync, openSync, readSync, closeSync } from 'node:fs';
+import { normalize, extname } from 'node:path';
+
 import {
   COGNITIVE_PHASES,
   PHASE_METADATA,
@@ -65,6 +68,132 @@ export function calculateCacheSavings(cacheTokens = 0) {
   if (tokens <= 0) return '$0.0000';
   const savings = tokens * 0.0000001125;
   return `$${savings.toFixed(4)}`;
+}
+
+/**
+ * Calculates context savings achieved through tool offloading and sandboxed execution.
+ * Kept out bytes are converted to prompt tokens (1 token ≈ 4 bytes) and benchmark dollar savings ($0.15/1M).
+ *
+ * @param {number} rawBytes Total raw bytes produced by files/tools
+ * @param {number} returnedBytes Bytes returned directly into context
+ * @returns {{ rawBytes: number, returnedBytes: number, keptOutBytes: number, tokensKeptOut: number, savingsPercent: number, dollarSavings: string }}
+ */
+export function calculateContextSavings(rawBytes = 0, returnedBytes = 0) {
+  const raw = Math.max(0, Number(rawBytes) || 0);
+  const ret = Math.max(0, Number(returnedBytes) || 0);
+  const keptOutBytes = Math.max(0, raw - ret);
+  const tokensKeptOut = Math.round(keptOutBytes / 4);
+  const savingsPercent = raw > 0 ? Number(((keptOutBytes / raw) * 100).toFixed(1)) : 0;
+  const savingsAmount = tokensKeptOut * 0.00000015;
+  return {
+    rawBytes: raw,
+    returnedBytes: ret,
+    keptOutBytes,
+    tokensKeptOut,
+    savingsPercent,
+    dollarSavings: `$${savingsAmount.toFixed(4)}`,
+  };
+}
+
+const KNOWN_TEXT_EXTENSIONS = new Set([
+  '.txt', '.md', '.markdown', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
+  '.json', '.yaml', '.yml', '.html', '.htm', '.css', '.scss', '.sass', '.less',
+  '.cs', '.py', '.rs', '.go', '.java', '.c', '.cpp', '.h', '.hpp', '.sh', '.bash',
+  '.ps1', '.sql', '.axaml', '.xml', '.svg', '.toml', '.ini', '.env', '.gitignore',
+]);
+
+const KNOWN_BINARY_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.tiff',
+  '.pdf', '.zip', '.tar', '.gz', '.7z', '.rar', '.wasm',
+  '.exe', '.dll', '.so', '.dylib', '.bin', '.db', '.sqlite', '.pb',
+]);
+
+/**
+ * Normalizes and sanitizes file paths across different agent tool conventions.
+ * Strips URI schemes (file:///), line anchors (#L1-L20), decoded characters, and quotes.
+ *
+ * @param {string} val
+ * @returns {string} Clean normalized file path
+ */
+export function cleanFilePath(val) {
+  if (val === undefined || val === null) return '';
+  let str = String(val).trim();
+  while (
+    (str.startsWith('"') && str.endsWith('"') && str.length >= 2) ||
+    (str.startsWith("'") && str.endsWith("'") && str.length >= 2)
+  ) {
+    str = str.slice(1, -1).trim();
+  }
+  if (!str) return '';
+
+  if (str.startsWith('file:///')) {
+    const after = str.slice(8);
+    str = /^[a-zA-Z]:/.test(after) ? after : '/' + after;
+  } else if (str.startsWith('file://')) {
+    str = str.slice(7);
+  }
+
+  try {
+    str = decodeURIComponent(str);
+  } catch {}
+
+  str = str.replace(/#L\d+(-L\d+)?$/i, '');
+  return normalize(str.trim());
+}
+
+/**
+ * Inspects a memory buffer for binary characteristics and magic headers.
+ *
+ * @param {Buffer|Uint8Array} buf
+ * @param {number} bytesRead
+ * @returns {boolean} True if buffer indicates binary data
+ */
+export function isBinaryBuffer(buf, bytesRead = buf ? buf.length : 0) {
+  if (!buf || bytesRead <= 0) return false;
+
+  // UTF-16 LE / BE BOM
+  if (bytesRead >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff))) {
+    return false;
+  }
+  // UTF-8 BOM
+  if (bytesRead >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+    return false;
+  }
+  // PDF magic header (%PDF)
+  if (bytesRead >= 4 && buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) {
+    return true;
+  }
+
+  // Scan first chunk for null bytes
+  for (let i = 0; i < bytesRead; i++) {
+    if (buf[i] === 0) return true;
+  }
+  return false;
+}
+
+/**
+ * Checks whether a given file path points to a binary file by extension and magic bytes.
+ *
+ * @param {string} filePath
+ * @returns {boolean}
+ */
+export function isBinaryFile(filePath) {
+  if (!filePath || typeof filePath !== 'string') return false;
+  const ext = extname(filePath).toLowerCase();
+  if (KNOWN_TEXT_EXTENSIONS.has(ext)) return false;
+  if (KNOWN_BINARY_EXTENSIONS.has(ext)) return true;
+
+  try {
+    if (existsSync(filePath)) {
+      const fd = openSync(filePath, 'r');
+      const buf = Buffer.alloc(512);
+      const bytesRead = readSync(fd, buf, 0, 512, 0);
+      closeSync(fd);
+      return isBinaryBuffer(buf, bytesRead);
+    }
+  } catch {}
+
+  return false;
 }
 
 /**
@@ -529,6 +658,8 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
   let totalInputTokens = 0;
   let totalCacheTokens = 0;
   let totalOutputTokens = 0;
+  let totalRawBytes = 0;
+  let totalReturnedBytes = 0;
   let latestContextTokens = 0;
   let peakContextTokens = 0;
   let compactionsCount = 0;
@@ -730,6 +861,12 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
       }
     }
 
+    const outputBytes = Buffer.byteLength(outputSnippet || '', 'utf8');
+    totalReturnedBytes += outputBytes;
+    const isTruncated = Boolean(step.truncated_fields?.includes('content') || step.truncated_fields?.includes('tool_calls'));
+    const estimatedRaw = isTruncated ? outputBytes * 4 : outputBytes;
+    totalRawBytes += Math.max(outputBytes, estimatedRaw);
+
     const stepInput = step.input_tokens || 0;
     const stepCache = step.cache_read_tokens || 0;
     const stepOutput = step.output_tokens || 0;
@@ -847,6 +984,9 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
     contextLimit,
   });
 
+  // Calculate context savings & tool offload metrics
+  const contextSavings = calculateContextSavings(totalRawBytes, totalReturnedBytes);
+
   return {
     status: 'active',
     conversationId,
@@ -863,6 +1003,7 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
     estimatedCost,
     cacheHitRate,
     cacheSavings,
+    contextSavings,
     latestContextTokens,
     peakContextTokens,
     contextLimit,

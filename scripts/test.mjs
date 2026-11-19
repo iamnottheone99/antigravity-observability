@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 
 import {
   calculateCacheHitRate,
   calculateCacheSavings,
+  calculateContextSavings,
+  cleanFilePath,
+  isBinaryBuffer,
+  isBinaryFile,
   calculateCost,
   detectRepetitionLoop,
   escapeHtml,
@@ -24,6 +29,13 @@ import {
   calculateAgentHealth,
   extractProjectFolder,
 } from '../plugin/sidecars/panel/telemetry.mjs';
+
+import {
+  initFtsIndex,
+  sanitizeFtsQuery,
+  indexSessionSteps,
+  searchTranscripts,
+} from '../plugin/sidecars/panel/fts.mjs';
 
 import {
   cosineSimilarity,
@@ -171,14 +183,17 @@ console.log('\n[Syntax Verification]');
 
 function checkJsSyntax(relPath) {
   runTest(`Syntax OK: ${relPath}`, () => {
-    execFileSync('node', ['-c', join(ROOT, relPath)]);
+    execFileSync(process.execPath, ['-c', join(ROOT, relPath)]);
   });
 }
 
 checkJsSyntax('plugin/sidecars/panel/main.mjs');
 checkJsSyntax('plugin/sidecars/panel/telemetry.mjs');
 checkJsSyntax('plugin/sidecars/panel/classifier.mjs');
+checkJsSyntax('plugin/sidecars/panel/fts.mjs');
 checkJsSyntax('plugin/sidecars/panel/app.js');
+checkJsSyntax('plugin/hooks/session-start.js');
+checkJsSyntax('plugin/hooks/pre-tool-use.js');
 checkJsSyntax('scripts/install.mjs');
 checkJsSyntax('scripts/test.mjs');
 checkJsSyntax('tests/panel.test.js');
@@ -929,6 +944,133 @@ runTest('extractProjectFolder parses file URIs, paths and edge cases', () => {
 runTest('panel UI test suite executes all 34 component functions cleanly', () => {
   const out = execFileSync(process.execPath, [join(ROOT, 'tests/panel.test.js')], { encoding: 'utf8' });
   assert.ok(out.includes('All 34 panel functions executed and verified successfully'), 'Panel tests failed');
+});
+
+// -----------------------------------------------------------------------------
+// 6. Extracted Context-Mode Features
+// -----------------------------------------------------------------------------
+console.log('\n[Extracted Context-Mode Features]');
+
+// Feature 1: Lifecycle Hooks
+runTest('Feature 1: hooks.json defines valid PreToolUse and SessionStart hooks', () => {
+  const hooks = JSON.parse(readFileSync(join(PLUGIN, 'hooks.json'), 'utf8'));
+  assert.ok(hooks['agent-observability']);
+  assert.ok(Array.isArray(hooks['agent-observability'].PreToolUse));
+  assert.ok(Array.isArray(hooks['agent-observability'].SessionStart));
+});
+
+runTest('Feature 1: session-start.js and pre-tool-use.js execute cleanly', () => {
+  const ssOut = execFileSync(process.execPath, [join(PLUGIN, 'hooks/session-start.js')], {
+    input: '',
+    encoding: 'utf8',
+  });
+  const parsedSs = JSON.parse(ssOut);
+  assert.ok(parsedSs.injectSteps?.[0]?.systemMessage?.systemMessage.includes('agent-observability active'));
+
+  const ptuOut = execFileSync(process.execPath, [join(PLUGIN, 'hooks/pre-tool-use.js')], {
+    input: JSON.stringify({ toolCall: { name: 'test_tool', args: { a: 1 } } }),
+    encoding: 'utf8',
+  });
+  const parsedPtu = JSON.parse(ptuOut);
+  assert.equal(parsedPtu.decision, 'allow');
+});
+
+// Feature 2: Context Savings and Token Economy Telemetry
+runTest('Feature 2: calculateContextSavings computes exact offloaded tokens and financial savings', () => {
+  const savings = calculateContextSavings(40000, 8000);
+  assert.equal(savings.rawBytes, 40000);
+  assert.equal(savings.returnedBytes, 8000);
+  assert.equal(savings.keptOutBytes, 32000);
+  assert.equal(savings.tokensKeptOut, 8000); // 32000 / 4
+  assert.equal(savings.savingsPercent, 80);
+  assert.equal(savings.dollarSavings, '$0.0012'); // 8000 * 0.00000015
+});
+
+runTest('Feature 2: parseTranscript embeds contextSavings in telemetry output', () => {
+  const report = parseTranscript('', { conversationId: 'conv-savings' });
+  assert.ok(report.contextSavings);
+  assert.equal(typeof report.contextSavings.keptOutBytes, 'number');
+  assert.equal(typeof report.contextSavings.tokensKeptOut, 'number');
+  assert.equal(typeof report.contextSavings.dollarSavings, 'string');
+});
+
+// Feature 3: Application Session Scoping
+runTest('Feature 3: sidecar main.mjs implements application session scoping', () => {
+  const code = readFileSync(join(PLUGIN, 'sidecars/panel/main.mjs'), 'utf8');
+  assert.ok(code.includes('appStartTime'), 'Missing appStartTime detection');
+  assert.ok(code.includes("sessionScopes: ['conversation', 'app', 'lifetime']"), 'Missing sessionScopes in /api/status');
+});
+
+// Feature 4: Robust Binary Sniffing and Path Sanitization
+runTest('Feature 4: cleanFilePath strips URI schemes, anchors, and surrounding quotes', () => {
+  assert.equal(cleanFilePath('file:///c:/project/file.js#L10-L25'), normalize('c:/project/file.js'));
+  assert.equal(cleanFilePath('"file:///var/log/app.log"'), normalize('/var/log/app.log'));
+  assert.equal(cleanFilePath("'/usr/src/main.ts#L42'"), normalize('/usr/src/main.ts'));
+  assert.equal(cleanFilePath('file://c%3A/Users/test/doc.txt'), normalize('c:/Users/test/doc.txt'));
+  assert.equal(cleanFilePath(''), '');
+  assert.equal(cleanFilePath(null), '');
+});
+
+runTest('Feature 4: isBinaryBuffer and isBinaryFile accurately detect binary vs text formats', () => {
+  // UTF-8 / UTF-16 text BOMs
+  const utf8Buf = Buffer.from([0xef, 0xbb, 0xbf, 0x61, 0x62, 0x63]);
+  assert.equal(isBinaryBuffer(utf8Buf), false);
+
+  const utf16Buf = Buffer.from([0xff, 0xfe, 0x61, 0x00]);
+  assert.equal(isBinaryBuffer(utf16Buf), false);
+
+  // PDF Magic Header
+  const pdfBuf = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]);
+  assert.equal(isBinaryBuffer(pdfBuf), true);
+
+  // Null byte in binary buffer
+  const binBuf = Buffer.from([0x48, 0x65, 0x00, 0x6c, 0x6f]);
+  assert.equal(isBinaryBuffer(binBuf), true);
+
+  // Plain text buffer
+  const txtBuf = Buffer.from('Hello world');
+  assert.equal(isBinaryBuffer(txtBuf), false);
+
+  // Extension checking
+  assert.equal(isBinaryFile('doc.pdf'), true);
+  assert.equal(isBinaryFile('image.png'), true);
+  assert.equal(isBinaryFile('archive.zip'), true);
+  assert.equal(isBinaryFile('program.exe'), true);
+  assert.equal(isBinaryFile('script.js'), false);
+  assert.equal(isBinaryFile('README.md'), false);
+  assert.equal(isBinaryFile('data.json'), false);
+});
+
+// Feature 5: SQLite FTS5 Indexing Architecture
+runTest('Feature 5: SQLite FTS5 engine indexes traces and searches with BM25 trigram ranking', () => {
+  const db = new DatabaseSync(':memory:');
+  initFtsIndex(db);
+
+  assert.equal(sanitizeFtsQuery('test search "query"'), '"test" "search" "query"');
+
+  const steps = [
+    { stepIndex: 0, source: 'USER', content: 'Please investigate memory leak in payment module' },
+    { stepIndex: 1, source: 'MODEL', content: 'Running diagnostic search for memory leak stack trace' },
+    { stepIndex: 2, source: 'MODEL', content: 'Fixed connection pooling leak in database driver' },
+  ];
+
+  const indexed = indexSessionSteps(db, 'conv-test-fts', steps);
+  assert.equal(indexed, 3);
+
+  const hits = searchTranscripts(db, 'memory leak', 10);
+  assert.equal(hits.length, 2);
+  assert.equal(hits[0].conversationId, 'conv-test-fts');
+  assert.ok(hits[0].snippet.includes('memory'));
+  assert.ok(typeof hits[0].score === 'number');
+  db.close();
+});
+
+// Feature 6: Runtime Diagnostic Checks
+runTest('Feature 6: sidecar main.mjs defines /api/search and /api/doctor diagnostic endpoints', () => {
+  const code = readFileSync(join(PLUGIN, 'sidecars/panel/main.mjs'), 'utf8');
+  assert.ok(code.includes("app.api('/api/search'"), 'Missing /api/search route');
+  assert.ok(code.includes("app.api('/api/doctor'"), 'Missing /api/doctor route');
+  assert.ok(code.includes('runDiagnostics()'), 'Missing runDiagnostics helper');
 });
 
 // -----------------------------------------------------------------------------
