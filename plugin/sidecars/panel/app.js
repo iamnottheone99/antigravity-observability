@@ -941,7 +941,12 @@ ${fileLines}
       byId('val-context').textContent = ctxK;
       const ctxLoadText = data.contextLoadPercent || '0.0%';
       const ctxNumeric = parseFloat(ctxLoadText) || 0;
-      byId('val-context-load').textContent = `${ctxLoadText} load`;
+      const savings = data.contextSavings;
+      if (savings && savings.tokensKeptOut > 0) {
+        byId('val-context-load').textContent = `${ctxLoadText} load · saved ${formatTokens(savings.tokensKeptOut)}`;
+      } else {
+        byId('val-context-load').textContent = `${ctxLoadText} load`;
+      }
       const ctxBar = byId('bar-context-fill');
       if (ctxBar) {
         ctxBar.style.width = `${Math.min(100, ctxNumeric)}%`;

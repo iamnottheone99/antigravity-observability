@@ -967,12 +967,24 @@ runTest('Feature 1: session-start.js and pre-tool-use.js execute cleanly', () =>
   const parsedSs = JSON.parse(ssOut);
   assert.ok(parsedSs.injectSteps?.[0]?.systemMessage?.systemMessage.includes('agent-observability active'));
 
+  const testSessionId = `test-ptu-${Date.now()}`;
   const ptuOut = execFileSync(process.execPath, [join(PLUGIN, 'hooks/pre-tool-use.js')], {
-    input: JSON.stringify({ toolCall: { name: 'test_tool', args: { a: 1 } } }),
+    input: JSON.stringify({ sessionId: testSessionId, toolCall: { name: 'test_tool', args: { a: 1 } } }),
     encoding: 'utf8',
   });
   const parsedPtu = JSON.parse(ptuOut);
   assert.equal(parsedPtu.decision, 'allow');
+
+  // Verify loop radar trigger on 5 consecutive identical calls
+  let lastDecision = 'allow';
+  for (let i = 0; i < 4; i++) {
+    const loopOut = execFileSync(process.execPath, [join(PLUGIN, 'hooks/pre-tool-use.js')], {
+      input: JSON.stringify({ sessionId: testSessionId, toolCall: { name: 'test_tool', args: { a: 1 } } }),
+      encoding: 'utf8',
+    });
+    lastDecision = JSON.parse(loopOut).decision;
+  }
+  assert.equal(lastDecision, 'deny');
 });
 
 // Feature 2: Context Savings and Token Economy Telemetry

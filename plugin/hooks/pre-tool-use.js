@@ -94,6 +94,7 @@ export function isBinaryFile(filePath) {
 }
 
 function recordAndCheckLoop(toolName, signature, sessionId = 'default') {
+  const now = Date.now();
   let callHistory = {};
   try {
     if (existsSync(RECENT_CALLS_FILE)) {
@@ -101,8 +102,10 @@ function recordAndCheckLoop(toolName, signature, sessionId = 'default') {
     }
   } catch {}
 
-  const list = Array.isArray(callHistory[sessionId]) ? callHistory[sessionId] : [];
-  list.push({ toolName, signature, time: Date.now() });
+  // Filter out expired calls older than 60 seconds to prevent cross-session leakage
+  const rawList = Array.isArray(callHistory[sessionId]) ? callHistory[sessionId] : [];
+  const list = rawList.filter((item) => now - (item.time || 0) < 60000);
+  list.push({ toolName, signature, time: now });
 
   // Keep last 20 entries
   if (list.length > 20) {

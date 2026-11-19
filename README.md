@@ -37,6 +37,23 @@ Rendered directly inside Antigravity's **Auxiliary Side Pane**, this extension t
   - Detailed prompt cache savings ($0.1125 / 1M tokens saved) and token breakdown in session reports.
   - Mathematically bounded Prompt Cache Hit Rate calculation ($\frac{\text{cached}}{\text{uncached} + \text{cached}} \times 100\%$).
   - Per-step breakdown of fresh prompt tokens, cached prompt hits, and completion tokens in trace drawers.
+* **Active Lifecycle Hooks & Guardrails**:
+  - `PreToolUse` hook intercepts consecutive identical tool calls before execution when the Loop Radar detects a repetitive cycle.
+  - `SessionStart` hook injects active observability announcements at conversation start.
+* **Context Savings & Offload Telemetry**:
+  - Real-time measurement of raw data volume processed versus data returned to prompt context (`sandboxBytes` vs `returnedBytes`).
+  - Precise computation of tokens kept out of prompt context and dollar savings from prevented context bloat.
+* **Application Session Scoping**:
+  - Multi-tiered telemetry scoping across `conversation`, `app` (current IDE process run), and `lifetime`.
+  - Automatic detection of parent IDE process start time to isolate metrics for the active session.
+* **Binary Sniffing & URI Path Sanitization**:
+  - Zero-dependency 512-byte buffer inspection algorithm verifying byte order marks, PDF headers, and null bytes.
+  - Robust URI sanitization stripping `file:///` schemes, line anchors (`#L1-L20`), and quotes for safe trace rendering.
+* **SQLite FTS5 BM25 Trigram Search Engine**:
+  - Embedded SQLite FTS5 search engine supporting trigram tokenization, BM25 ranking, and cross-session search across conversation traces.
+  - Instant keyword queries across historical transcripts without loading large transcript files into memory.
+* **System Diagnostics & Doctor Health Check**:
+  - Dedicated `/api/doctor` endpoint verifying SQLite WAL mode, database write latency, disk accessibility, and runtime health.
 * **Antigravity Context Window & Headroom Meter**:
   - Live tracking of active context window volume against the 1.0M Gemini token limit.
   - Visual load percentage bar with amber warning ($\ge 70\%$) and red danger ($\ge 85\%$) thresholds.
