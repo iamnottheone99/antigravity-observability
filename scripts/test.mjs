@@ -3,7 +3,13 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DatabaseSync } from 'node:sqlite';
+
+// Dynamic import of node:sqlite for backwards compatibility with Node.js < 22.5.0
+let DatabaseSync = null;
+try {
+  const sqlite = await import('node:sqlite');
+  DatabaseSync = sqlite.DatabaseSync || null;
+} catch {}
 
 import {
   calculateCacheHitRate,
@@ -1055,10 +1061,15 @@ runTest('Feature 4: isBinaryBuffer and isBinaryFile accurately detect binary vs 
 
 // Feature 5: SQLite FTS5 Indexing Architecture
 runTest('Feature 5: SQLite FTS5 engine indexes traces and searches with BM25 trigram ranking', () => {
+  assert.equal(sanitizeFtsQuery('test search "query"'), '"test" "search" "query"');
+
+  if (!DatabaseSync) {
+    // node:sqlite is available in Node.js >= 22.5.0; skip in-memory DB tests on Node 20.x
+    return;
+  }
+
   const db = new DatabaseSync(':memory:');
   initFtsIndex(db);
-
-  assert.equal(sanitizeFtsQuery('test search "query"'), '"test" "search" "query"');
 
   const steps = [
     { stepIndex: 0, source: 'USER', content: 'Please investigate memory leak in payment module' },
