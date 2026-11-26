@@ -653,7 +653,29 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
     sessions = [],
   } = meta;
 
-  const lines = (rawTranscript || '').trim().split(/\r?\n/).filter(Boolean);
+  const str = rawTranscript || '';
+  const rawSteps = [];
+  let lineStart = 0;
+  const transcriptLen = str.length;
+
+  while (lineStart < transcriptLen) {
+    let lineEnd = str.indexOf('\n', lineStart);
+    if (lineEnd === -1) lineEnd = transcriptLen;
+
+    let line = str.slice(lineStart, lineEnd);
+    if (line.endsWith('\r')) line = line.slice(0, -1);
+    const trimmed = line.trim();
+
+    if (trimmed.length > 0) {
+      try {
+        rawSteps.push(JSON.parse(trimmed));
+      } catch {
+        // Ignore trailing malformed or partial JSON lines
+      }
+    }
+
+    lineStart = lineEnd + 1;
+  }
 
   let totalInputTokens = 0;
   let totalCacheTokens = 0;
@@ -674,15 +696,6 @@ export function parseTranscript(rawTranscript = '', meta = {}) {
   const parsedSteps = [];
   const failedSteps = [];
   const recentToolCalls = [];
-
-  const rawSteps = [];
-  for (let i = 0; i < lines.length; i++) {
-    try {
-      rawSteps.push(JSON.parse(lines[i]));
-    } catch {
-      // Ignore trailing malformed or partial JSON lines
-    }
-  }
 
   for (let i = 0; i < rawSteps.length; i++) {
     const step = rawSteps[i];

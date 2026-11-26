@@ -86,10 +86,45 @@ app.page('/', () => new Response(readLocal('index.html'), { contentType: 'text/h
 app.page('/app.js', () => new Response(readLocal('app.js'), { contentType: 'application/javascript', headers: SECURITY_HEADERS }));
 app.api('/styles.css', () => new Response(readLocal('styles.css'), { contentType: 'text/css', headers: SECURITY_HEADERS }), 'GET');
 
+// Persistent read-only SQLite handle for conversation summaries with auto-recovery
+let persistentDb = null;
+function getPersistentDb() {
+  if (!DatabaseSync || !existsSync(DB_PATH)) return null;
+  if (persistentDb) return persistentDb;
+  try {
+    persistentDb = new DatabaseSync(DB_PATH, { open: true, readOnly: true });
+    persistentDb.pragma('journal_mode=WAL');
+    persistentDb.pragma('busy_timeout=3000');
+    persistentDb.pragma('cache_size=-64000');
+    return persistentDb;
+  } catch {
+    persistentDb = null;
+    return null;
+  }
+}
+
+function resetPersistentDb() {
+  if (persistentDb) {
+    try { persistentDb.close(); } catch {}
+    persistentDb = null;
+  }
+}
+
+let cachedDiagnostics = null;
+let diagnosticsCacheExpiry = 0;
+const DIAGNOSTICS_TTL_MS = 15000;
+
 /**
  * Diagnostic health check evaluator for system resources, database, and latency.
+ * @param {boolean} [force=false] Force refresh ignoring cache
+ * @param {boolean} [measureDisk=false] Perform real physical disk I/O benchmark
  */
-function runDiagnostics() {
+function runDiagnostics(force = false, measureDisk = false) {
+  const now = Date.now();
+  if (!force && !measureDisk && cachedDiagnostics && now < diagnosticsCacheExpiry) {
+    return cachedDiagnostics;
+  }
+
   const result = {
     status: 'HEALTHY',
     allOk: true,
@@ -100,7 +135,7 @@ function runDiagnostics() {
       walEnabled: false,
       busyTimeoutMs: 3000,
     },
-    diskLatencyMs: 0,
+    diskLatencyMs: cachedDiagnostics?.diskLatencyMs ?? 0,
     neuralEmbedding: getEmbeddingEngineStatus(),
     runtimes: {
       node: process.version,
@@ -113,36 +148,36 @@ function runDiagnostics() {
     appUptimeSeconds: Math.round((Date.now() - appStartTime) / 1000),
   };
 
-  // Disk I/O latency probe
-  try {
-    const testFile = join(tmpdir(), `antigravity-diagnostics-${Date.now()}.tmp`);
-    const t0 = performance.now();
-    writeFileSync(testFile, '1');
-    readFileSync(testFile);
-    unlinkSync(testFile);
-    result.diskLatencyMs = Number((performance.now() - t0).toFixed(2));
-  } catch {
-    result.diskLatencyMs = -1;
+  // Perform physical disk I/O probe only when requested or initially cold
+  if (measureDisk || (force && typeof cachedDiagnostics?.diskLatencyMs !== 'number')) {
+    try {
+      const testFile = join(tmpdir(), `antigravity-diagnostics-${Date.now()}.tmp`);
+      const t0 = performance.now();
+      writeFileSync(testFile, '1');
+      readFileSync(testFile);
+      unlinkSync(testFile);
+      result.diskLatencyMs = Number((performance.now() - t0).toFixed(2));
+    } catch {
+      result.diskLatencyMs = -1;
+    }
   }
 
-  // SQLite WAL check
-  if (DatabaseSync && existsSync(DB_PATH)) {
-    let db = null;
+  // SQLite WAL check via persistent pooled connection
+  const db = getPersistentDb();
+  if (db) {
     try {
-      db = new DatabaseSync(DB_PATH, { open: true, readOnly: true });
       const mode = db.prepare('PRAGMA journal_mode').get();
       result.db.walEnabled = mode && String(Object.values(mode)[0]).toLowerCase() === 'wal';
     } catch (err) {
       result.db.error = err.message;
       result.status = 'DEGRADED';
       result.allOk = false;
-    } finally {
-      if (db) {
-        try { db.close(); } catch {}
-      }
+      resetPersistentDb();
     }
   }
 
+  cachedDiagnostics = result;
+  diagnosticsCacheExpiry = now + DIAGNOSTICS_TTL_MS;
   return result;
 }
 
@@ -170,15 +205,10 @@ function getRecentSessions(force = false) {
 
   let sessions = [];
 
-  // Strategy 1: Read conversation_summaries.db (SQLite)
-  if (DatabaseSync && existsSync(DB_PATH)) {
-    let db = null;
+  // Strategy 1: Read conversation_summaries.db (SQLite) via persistent connection handle
+  const db = getPersistentDb();
+  if (db) {
     try {
-      db = new DatabaseSync(DB_PATH, { open: true, readOnly: true });
-      // Enable WAL journal mode, shared cache, and increased page cache for safe concurrent reads.
-      db.pragma('journal_mode=WAL');
-      db.pragma('busy_timeout=3000');
-      db.pragma('cache_size=-64000');
       const rows = db.prepare(`
         SELECT conversation_id, title, preview, step_count, last_modified_time, parent_conversation_id, workspace_uris, project_id
         FROM conversation_summaries
@@ -219,15 +249,8 @@ function getRecentSessions(force = false) {
         });
       }
     } catch (err) {
+      resetPersistentDb();
       console.warn('Fallback to brain scan (DB error):', err.message);
-    } finally {
-      if (db) {
-        try {
-          db.close();
-        } catch {
-          // ignore close error
-        }
-      }
     }
   }
 
@@ -458,7 +481,7 @@ app.api('/api/search', (params) => {
 
 // Detailed runtime diagnostics endpoint
 app.api('/api/doctor', () => {
-  return runDiagnostics();
+  return runDiagnostics(true, true);
 }, 'GET');
 
 /**

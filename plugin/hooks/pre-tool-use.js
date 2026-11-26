@@ -9,8 +9,13 @@ import { existsSync, openSync, readFileSync, readSync, closeSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { isAbsolute, normalize, resolve, extname } from 'node:path';
 
-const RECENT_CALLS_FILE = resolve(tmpdir(), 'antigravity-observability-tool-calls.json');
+export const RECENT_CALLS_FILE = resolve(tmpdir(), 'antigravity-observability-tool-calls.json');
 const LOOP_THRESHOLD = 5;
+
+function getSessionCallsFile(sessionId = 'default') {
+  const safeId = String(sessionId).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48);
+  return resolve(tmpdir(), `ag-obs-calls-${safeId || 'default'}.json`);
+}
 
 const KNOWN_TEXT_EXTENSIONS = new Set([
   '.txt', '.md', '.markdown', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
@@ -95,32 +100,31 @@ export function isBinaryFile(filePath) {
 
 function recordAndCheckLoop(toolName, signature, sessionId = 'default') {
   const now = Date.now();
-  let callHistory = {};
+  const filePath = getSessionCallsFile(sessionId);
+  let list = [];
   try {
-    if (existsSync(RECENT_CALLS_FILE)) {
-      callHistory = JSON.parse(readFileSync(RECENT_CALLS_FILE, 'utf8'));
+    if (existsSync(filePath)) {
+      list = JSON.parse(readFileSync(filePath, 'utf8'));
     }
   } catch {}
 
   // Filter out expired calls older than 60 seconds to prevent cross-session leakage
-  const rawList = Array.isArray(callHistory[sessionId]) ? callHistory[sessionId] : [];
-  const list = rawList.filter((item) => now - (item.time || 0) < 60000);
-  list.push({ toolName, signature, time: now });
+  const activeList = (Array.isArray(list) ? list : []).filter((item) => now - (item.time || 0) < 60000);
+  activeList.push({ toolName, signature, time: now });
 
-  // Keep last 20 entries
-  if (list.length > 20) {
-    list.splice(0, list.length - 20);
+  // Keep last 15 entries for this session
+  if (activeList.length > 15) {
+    activeList.splice(0, activeList.length - 15);
   }
-  callHistory[sessionId] = list;
 
   try {
-    writeFileSync(RECENT_CALLS_FILE, JSON.stringify(callHistory), 'utf8');
+    writeFileSync(filePath, JSON.stringify(activeList), 'utf8');
   } catch {}
 
   // Check trailing streak
   let streak = 0;
-  for (let i = list.length - 1; i >= 0; i--) {
-    if (list[i].toolName === toolName && list[i].signature === signature) {
+  for (let i = activeList.length - 1; i >= 0; i--) {
+    if (activeList[i].toolName === toolName && activeList[i].signature === signature) {
       streak++;
     } else {
       break;

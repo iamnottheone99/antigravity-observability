@@ -502,10 +502,14 @@
     renderWaterfall();
   }
 
+  let lastWaterfallSig = '';
+  let maxVisibleSteps = 60;
+
   /**
    * Render vertical waterfall trace feed with expandable step drawers.
+   * @param {boolean} [force=false] Force full DOM re-render ignoring signature
    */
-  function renderWaterfall() {
+  function renderWaterfall(force = false) {
     if (!lastTelemetryData) return;
     const feedEl = byId('waterfall-feed');
     let items = lastTelemetryData.recentSteps || [];
@@ -547,13 +551,34 @@
     }
 
     if (items.length === 0) {
+      lastWaterfallSig = '';
       feedEl.innerHTML = currentMode === 'errors'
         ? '<div class="empty-state">No errors recorded in this trace.</div>'
         : (traceSearchQuery ? '<div class="empty-state">No traces match your search filter.</div>' : '<div class="empty-state">Waiting for agent activity...</div>');
       return;
     }
 
-    feedEl.innerHTML = items.map((s) => {
+    // Determine windowed slice for high-performance rendering
+    const isTruncated = items.length > maxVisibleSteps;
+    const visibleItems = isTruncated ? items.slice(-maxVisibleSteps) : items;
+    const hiddenCount = items.length - visibleItems.length;
+
+    // Fast change detection signature: avoids re-rendering full DOM tree if steps/expansion haven't changed
+    const currentSig = `${items.length}-${visibleItems.length}-${currentMode}-${selectedErrorCluster}-${traceSearchQuery}-${Array.from(expandedStepIndices).join(',')}`;
+    if (!force && currentSig === lastWaterfallSig) {
+      return;
+    }
+    lastWaterfallSig = currentSig;
+
+    const loadMoreHeader = isTruncated ? `
+      <div style="text-align: center; padding: 6px 0 10px;">
+        <button id="btn-load-earlier-steps" class="btn-action-primary" type="button" style="font-size: 10px; padding: 3px 10px;">
+          Load earlier steps (${hiddenCount} hidden)
+        </button>
+      </div>
+    ` : '';
+
+    feedEl.innerHTML = loadMoreHeader + visibleItems.map((s) => {
       const isErr = s.status === 'ERROR';
       const isExpanded = expandedStepIndices.has(s.stepIndex);
       let toolHtml = '';
@@ -1124,6 +1149,14 @@ ${fileLines}
 
     // Event delegation on #waterfall-feed to toggle drawer expansion & copy output snippets
     byId('waterfall-feed').addEventListener('click', (e) => {
+      const loadMoreBtn = e.target.closest('#btn-load-earlier-steps');
+      if (loadMoreBtn) {
+        e.stopPropagation();
+        maxVisibleSteps += 50;
+        renderWaterfall(true);
+        return;
+      }
+
       const copyBtn = e.target.closest('.btn-copy-mini');
       if (copyBtn) {
         e.stopPropagation();

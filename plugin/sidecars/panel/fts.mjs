@@ -48,33 +48,53 @@ export function indexSessionSteps(db, conversationId, steps = []) {
 
   initFtsIndex(db);
 
-  // Remove existing indexed steps for this session to avoid duplication
+  let inTx = false;
   try {
-    db.prepare('DELETE FROM transcript_fts WHERE conversation_id = ?').run(conversationId);
+    db.exec('BEGIN IMMEDIATE');
+    inTx = true;
   } catch {}
 
-  const insertStmt = db.prepare(`
-    INSERT INTO transcript_fts (conversation_id, step_index, role, tool_name, content)
-    VALUES (?, ?, ?, ?, ?)
-  `);
+  try {
+    // Remove existing indexed steps for this session to avoid duplication
+    try {
+      db.prepare('DELETE FROM transcript_fts WHERE conversation_id = ?').run(conversationId);
+    } catch {}
 
-  let count = 0;
-  for (const step of steps) {
-    if (!step) continue;
-    const stepIdx = String(step.stepIndex ?? step.step_index ?? count);
-    const role = step.source || step.role || step.type || 'SYSTEM';
-    const toolName = step.toolsInStep?.[0]?.name || step.tool_calls?.[0]?.name || '';
-    const content = typeof step.content === 'string'
-      ? step.content
-      : (typeof step.output === 'string' ? step.output : JSON.stringify(step.args || {}));
+    const insertStmt = db.prepare(`
+      INSERT INTO transcript_fts (conversation_id, step_index, role, tool_name, content)
+      VALUES (?, ?, ?, ?, ?)
+    `);
 
-    if (content && content.trim()) {
-      insertStmt.run(conversationId, stepIdx, role, toolName, content.slice(0, 16384));
-      count++;
+    let count = 0;
+    for (const step of steps) {
+      if (!step) continue;
+      const stepIdx = String(step.stepIndex ?? step.step_index ?? count);
+      const role = step.source || step.role || step.type || 'SYSTEM';
+      const toolName = step.toolsInStep?.[0]?.name || step.tool_calls?.[0]?.name || '';
+      const content = typeof step.content === 'string'
+        ? step.content
+        : (typeof step.output === 'string' ? step.output : JSON.stringify(step.args || {}));
+
+      if (content && content.trim()) {
+        insertStmt.run(conversationId, stepIdx, role, toolName, content.slice(0, 16384));
+        count++;
+      }
     }
-  }
 
-  return count;
+    if (inTx) {
+      try {
+        db.exec('COMMIT');
+      } catch {}
+    }
+    return count;
+  } catch (err) {
+    if (inTx) {
+      try {
+        db.exec('ROLLBACK');
+      } catch {}
+    }
+    throw err;
+  }
 }
 
 /**
